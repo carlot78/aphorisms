@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Aphorisms</title>
+  <meta name="description" content="One thought a day, drawn from the personal-development sources you choose.">
+  <meta name="theme-color" content="#f6f1e7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#17161a" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Aphorisms</div>
+    <div class="date" id="date"></div>
+    <button class="icon-btn" id="open-sources" title="Sources &amp; settings" aria-label="Sources and settings">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4 7h16M4 12h16M4 17h10"/></svg>
+    </button>
+  </header>
+
+  <main class="stage">
+    <article class="card" id="card" hidden>
+      <p class="mark" aria-hidden="true">“</p>
+      <blockquote class="quote" id="quote-text"></blockquote>
+      <footer class="attribution">
+        <a class="source" id="quote-source" target="_blank" rel="noopener"></a>
+        <span class="cite" id="quote-cite"></span>
+      </footer>
+    </article>
+
+    <section class="empty" id="empty" hidden>
+      <p id="empty-msg">Loading your sources…</p>
+      <button class="btn primary" id="empty-action" hidden>Choose sources</button>
+    </section>
+
+    <div class="actions" id="actions" hidden>
+      <button class="btn" id="another" title="Show a different thought for today">Another</button>
+      <button class="btn" id="copy" title="Copy to clipboard">Copy</button>
+      <button class="btn" id="fav" title="Save to favourites" aria-pressed="false">☆ Save</button>
+    </div>
+  </main>
+
+  <details class="drawer" id="history-drawer">
+    <summary>Past days &amp; favourites</summary>
+    <div class="drawer-body">
+      <h3>Favourites</h3>
+      <ul class="list" id="fav-list"></ul>
+      <h3>Past days</h3>
+      <ul class="list" id="history-list"></ul>
+    </div>
+  </details>
+
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+
+  <dialog id="sources-dialog" class="dialog">
+    <form method="dialog" class="dialog-inner">
+      <header class="dialog-head">
+        <h2>Sources</h2>
+        <span class="muted" id="enabled-count"></span>
+        <button class="icon-btn" value="close" aria-label="Close">✕</button>
+      </header>
+
+      <p class="muted small">Tick what you want to hear from. Quotes are pulled from <a href="https://en.wikiquote.org" target="_blank" rel="noopener">Wikiquote</a> automatically and refreshed every week.</p>
+
+      <div id="source-groups"></div>
+
+      <h3>Add any Wikiquote page</h3>
+      <div class="row">
+        <input type="text" id="custom-title" placeholder="e.g. Marcus Aurelius, Walden, Stoicism" aria-label="Wikiquote page title">
+        <button type="button" class="btn" id="add-custom">Add</button>
+      </div>
+      <p class="muted small" id="custom-hint"></p>
+
+      <h3>My own lines</h3>
+      <p class="muted small">One thought per line. These stay in this browser only.</p>
+      <textarea id="own-lines" rows="5" placeholder="What stands in the way becomes the way."></textarea>
+
+      <h3>Data</h3>
+      <div class="row wrap">
+        <button type="button" class="btn" id="refresh-all">Refresh from Wikiquote now</button>
+        <button type="button" class="btn" id="reset-seen">Forget what I've seen</button>
+        <button type="button" class="btn danger" id="reset-all">Reset everything</button>
+      </div>
+      <p class="muted small" id="data-status"></p>
+    </form>
+  </dialog>
+
+  <footer class="foot">
+    <span>Text from <a href="https://en.wikiquote.org" target="_blank" rel="noopener">Wikiquote</a>, CC BY-SA 4.0.</span>
+    <a href="https://github.com/carlotuzi/aphorisms" target="_blank" rel="noopener" id="repo-link">Source</a>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
