@@ -1,6 +1,6 @@
-﻿# Aphorisms
+# Aphorisms
 
-One thought a day â€” a sentence, aphorism or short paragraph â€” drawn from the
+One thought a day — a sentence, aphorism or short paragraph — drawn from the
 personal-development sources you choose. The app fetches the text itself from
 [Wikiquote](https://en.wikiquote.org), so the pool keeps growing without you
 maintaining a quote list.
@@ -9,22 +9,22 @@ maintaining a quote list.
 
 ## How it works
 
-- **Sources** â€” a curated catalog of ~80 authors and books (Stoics, Eastern
-  wisdom, philosophers, psychologists, modern self-improvement writersâ€¦).
+- **Sources** — a curated catalog of ~80 authors and books (Stoics, Eastern
+  wisdom, philosophers, psychologists, modern self-improvement writers…).
   Tick the ones you want; add any other Wikiquote page by title; or paste your
   own lines.
-- **Autonomous retrieval** â€” the browser calls the Wikiquote API directly,
+- **Autonomous retrieval** — the browser calls the Wikiquote API directly,
   parses the quote lists, and caches them locally for a week. A GitHub Action
   ([`refresh-quotes.yml`](.github/workflows/refresh-quotes.yml)) also runs
   weekly and commits a snapshot under `data/` that the app falls back to when
   Wikiquote is unreachable.
-- **One per day** â€” the day's pick is chosen from your enabled sources with an
+- **One per day** — the day's pick is chosen from your enabled sources with an
   equal chance per source (so a 1000-quote page doesn't drown a 50-quote one),
   never repeats until everything has been shown, and stays put for the whole
   day. "Another" swaps it if it doesn't land.
-- **Installable & offline** â€” it's a PWA. On a phone, "Add to Home Screen";
+- **Installable & offline** — it's a PWA. On a phone, "Add to Home Screen";
   the shell and your cached quotes work without a connection.
-- **Private** â€” everything (selection, history, favourites, own lines) lives
+- **Private** — everything (selection, history, favourites, own lines) lives
   in your browser's localStorage. No account, no tracking, no backend.
 
 ## Run locally

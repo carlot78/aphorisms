@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 // Refresh the bundled quote snapshot from Wikiquote.
 //
 //   node scripts/fetch.mjs            # all catalog sources
