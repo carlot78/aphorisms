@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 // Refresh the bundled quote snapshot from Wikiquote.
 //
 //   node scripts/fetch.mjs            # all catalog sources
@@ -16,7 +16,7 @@ import { fetchSource } from '../src/wikiquote.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'data');
-const HEADERS = { 'User-Agent': 'aphorisms-bot/1.0 (https://github.com/carlotuzi/aphorisms)' };
+const HEADERS = { 'User-Agent': 'aphorisms-bot/1.0 (https://github.com/carlot78/aphorisms)' };
 const DELAY_MS = 800; // be polite to Wikiquote
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
