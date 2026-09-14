@@ -1,400 +1,400 @@
 {
-  "generated": "2026-09-13T18:20:03.238Z",
+  "generated": "2026-09-14T09:54:15.412Z",
   "sources": {
     "marcus-aurelius": {
       "title": "Marcus Aurelius",
       "count": 323,
-      "fetchedAt": "2026-09-13T18:18:49.890Z"
+      "fetchedAt": "2026-09-14T09:52:56.659Z"
     },
     "seneca": {
       "title": "Seneca the Younger",
       "count": 247,
-      "fetchedAt": "2026-09-13T18:18:50.891Z"
+      "fetchedAt": "2026-09-14T09:52:57.678Z"
     },
     "epictetus": {
       "title": "Epictetus",
       "count": 76,
-      "fetchedAt": "2026-09-13T18:18:51.781Z"
+      "fetchedAt": "2026-09-14T09:52:58.556Z"
     },
     "cicero": {
       "title": "Cicero",
       "count": 95,
-      "fetchedAt": "2026-09-13T18:18:52.730Z"
+      "fetchedAt": "2026-09-14T09:52:59.658Z"
     },
     "plutarch": {
       "title": "Plutarch",
       "count": 62,
-      "fetchedAt": "2026-09-13T18:18:53.590Z"
+      "fetchedAt": "2026-09-14T09:53:00.570Z"
     },
     "laozi": {
       "title": "Laozi",
       "count": 41,
-      "fetchedAt": "2026-09-13T18:18:54.475Z"
+      "fetchedAt": "2026-09-14T09:53:01.473Z"
     },
     "tao-te-ching": {
       "title": "Tao Te Ching",
       "count": 30,
-      "fetchedAt": "2026-09-13T18:18:55.443Z"
+      "fetchedAt": "2026-09-14T09:53:02.348Z"
     },
     "zhuangzi": {
       "title": "Zhuangzi",
       "count": 24,
-      "fetchedAt": "2026-09-13T18:18:56.317Z"
+      "fetchedAt": "2026-09-14T09:53:03.220Z"
     },
     "confucius": {
       "title": "Confucius",
       "count": 125,
-      "fetchedAt": "2026-09-13T18:18:57.211Z"
+      "fetchedAt": "2026-09-14T09:53:04.159Z"
     },
     "buddha": {
       "title": "Gautama Buddha",
       "count": 79,
-      "fetchedAt": "2026-09-13T18:18:58.108Z"
+      "fetchedAt": "2026-09-14T09:53:05.148Z"
     },
     "dhammapada": {
       "title": "Dhammapada",
       "count": 57,
-      "fetchedAt": "2026-09-13T18:18:59.007Z"
+      "fetchedAt": "2026-09-14T09:53:06.001Z"
     },
     "bhagavad-gita": {
       "title": "Bhagavad Gita",
       "count": 116,
-      "fetchedAt": "2026-09-13T18:18:59.905Z"
+      "fetchedAt": "2026-09-14T09:53:06.973Z"
     },
     "rumi": {
       "title": "Rumi",
       "count": 65,
-      "fetchedAt": "2026-09-13T18:19:00.887Z"
+      "fetchedAt": "2026-09-14T09:53:07.933Z"
     },
     "gibran": {
       "title": "Kahlil Gibran",
       "count": 80,
-      "fetchedAt": "2026-09-13T18:19:01.759Z"
+      "fetchedAt": "2026-09-14T09:53:08.806Z"
     },
     "sun-tzu": {
       "title": "Sun Tzu",
       "count": 52,
-      "fetchedAt": "2026-09-13T18:19:02.679Z"
+      "fetchedAt": "2026-09-14T09:53:09.680Z"
     },
     "musashi": {
       "title": "Miyamoto Musashi",
       "count": 96,
-      "fetchedAt": "2026-09-13T18:19:03.574Z"
+      "fetchedAt": "2026-09-14T09:53:10.574Z"
     },
     "thich-nhat-hanh": {
       "title": "Thích Nhất Hạnh",
       "count": 59,
-      "fetchedAt": "2026-09-13T18:19:04.442Z"
+      "fetchedAt": "2026-09-14T09:53:11.476Z"
     },
     "dalai-lama": {
       "title": "Tenzin Gyatso, 14th Dalai Lama",
       "count": 82,
-      "fetchedAt": "2026-09-13T18:19:05.388Z"
+      "fetchedAt": "2026-09-14T09:53:12.401Z"
     },
     "shunryu-suzuki": {
       "title": "Shunryu Suzuki",
       "count": 28,
-      "fetchedAt": "2026-09-13T18:19:06.240Z"
+      "fetchedAt": "2026-09-14T09:53:13.265Z"
     },
     "ramana-maharshi": {
       "title": "Ramana Maharshi",
       "count": 86,
-      "fetchedAt": "2026-09-13T18:19:07.134Z"
+      "fetchedAt": "2026-09-14T09:53:14.166Z"
     },
     "vivekananda": {
       "title": "Swami Vivekananda",
       "count": 217,
-      "fetchedAt": "2026-09-13T18:19:08.030Z"
+      "fetchedAt": "2026-09-14T09:53:15.361Z"
     },
     "krishnamurti": {
       "title": "Jiddu Krishnamurti",
       "count": 92,
-      "fetchedAt": "2026-09-13T18:19:08.951Z"
+      "fetchedAt": "2026-09-14T09:53:16.364Z"
     },
     "alan-watts": {
       "title": "Alan Watts",
       "count": 68,
-      "fetchedAt": "2026-09-13T18:19:09.828Z"
+      "fetchedAt": "2026-09-14T09:53:17.268Z"
     },
     "sadhguru": {
       "title": "Sadhguru",
       "count": 54,
-      "fetchedAt": "2026-09-13T18:19:10.683Z"
+      "fetchedAt": "2026-09-14T09:53:18.167Z"
     },
     "osho": {
       "title": "Rajneesh",
       "count": 54,
-      "fetchedAt": "2026-09-13T18:19:11.570Z"
+      "fetchedAt": "2026-09-14T09:53:19.081Z"
     },
     "socrates": {
       "title": "Socrates",
       "count": 87,
-      "fetchedAt": "2026-09-13T18:19:12.516Z"
+      "fetchedAt": "2026-09-14T09:53:20.022Z"
     },
     "aristotle": {
       "title": "Aristotle",
       "count": 104,
-      "fetchedAt": "2026-09-13T18:19:13.540Z"
+      "fetchedAt": "2026-09-14T09:53:21.033Z"
     },
     "epicurus": {
       "title": "Epicurus",
       "count": 42,
-      "fetchedAt": "2026-09-13T18:19:14.426Z"
+      "fetchedAt": "2026-09-14T09:53:21.943Z"
     },
     "montaigne": {
       "title": "Michel de Montaigne",
       "count": 148,
-      "fetchedAt": "2026-09-13T18:19:15.301Z"
+      "fetchedAt": "2026-09-14T09:53:22.825Z"
     },
     "pascal": {
       "title": "Blaise Pascal",
       "count": 68,
-      "fetchedAt": "2026-09-13T18:19:16.291Z"
+      "fetchedAt": "2026-09-14T09:53:23.690Z"
     },
     "schopenhauer": {
       "title": "Arthur Schopenhauer",
       "count": 160,
-      "fetchedAt": "2026-09-13T18:19:17.180Z"
+      "fetchedAt": "2026-09-14T09:53:24.639Z"
     },
     "nietzsche": {
       "title": "Friedrich Nietzsche",
       "count": 106,
-      "fetchedAt": "2026-09-13T18:19:18.247Z"
+      "fetchedAt": "2026-09-14T09:53:25.602Z"
     },
     "kierkegaard": {
       "title": "Søren Kierkegaard",
       "count": 159,
-      "fetchedAt": "2026-09-13T18:19:19.158Z"
+      "fetchedAt": "2026-09-14T09:53:26.559Z"
     },
     "emerson": {
       "title": "Ralph Waldo Emerson",
       "count": 287,
-      "fetchedAt": "2026-09-13T18:19:20.074Z"
+      "fetchedAt": "2026-09-14T09:53:27.483Z"
     },
     "thoreau": {
       "title": "Henry David Thoreau",
       "count": 176,
-      "fetchedAt": "2026-09-13T18:19:21.076Z"
+      "fetchedAt": "2026-09-14T09:53:28.456Z"
     },
     "william-james": {
       "title": "William James",
       "count": 141,
-      "fetchedAt": "2026-09-13T18:19:22.002Z"
+      "fetchedAt": "2026-09-14T09:53:29.438Z"
     },
     "camus": {
       "title": "Albert Camus",
       "count": 174,
-      "fetchedAt": "2026-09-13T18:19:22.918Z"
+      "fetchedAt": "2026-09-14T09:53:30.331Z"
     },
     "russell": {
       "title": "Bertrand Russell",
       "count": 379,
-      "fetchedAt": "2026-09-13T18:19:23.938Z"
+      "fetchedAt": "2026-09-14T09:53:31.305Z"
     },
     "taleb": {
       "title": "Nassim Nicholas Taleb",
       "count": 195,
-      "fetchedAt": "2026-09-13T18:19:24.834Z"
+      "fetchedAt": "2026-09-14T09:53:32.222Z"
     },
     "gracian": {
       "title": "Baltasar Gracián",
       "count": 27,
-      "fetchedAt": "2026-09-13T18:19:25.706Z"
+      "fetchedAt": "2026-09-14T09:53:33.088Z"
     },
     "la-rochefoucauld": {
       "title": "François de La Rochefoucauld",
       "count": 148,
-      "fetchedAt": "2026-09-13T18:19:26.616Z"
+      "fetchedAt": "2026-09-14T09:53:33.983Z"
     },
     "franklin": {
       "title": "Benjamin Franklin",
       "count": 72,
-      "fetchedAt": "2026-09-13T18:19:27.565Z"
+      "fetchedAt": "2026-09-14T09:53:34.978Z"
     },
     "tolstoy": {
       "title": "Leo Tolstoy",
       "count": 196,
-      "fetchedAt": "2026-09-13T18:19:28.576Z"
+      "fetchedAt": "2026-09-14T09:53:35.974Z"
     },
     "hesse": {
       "title": "Hermann Hesse",
       "count": 146,
-      "fetchedAt": "2026-09-13T18:19:29.537Z"
+      "fetchedAt": "2026-09-14T09:53:36.863Z"
     },
     "dostoyevsky": {
       "title": "Fyodor Dostoyevsky",
       "count": 86,
-      "fetchedAt": "2026-09-13T18:19:30.479Z"
+      "fetchedAt": "2026-09-14T09:53:37.800Z"
     },
     "twain": {
       "title": "Mark Twain",
       "count": 203,
-      "fetchedAt": "2026-09-13T18:19:31.453Z"
+      "fetchedAt": "2026-09-14T09:53:38.699Z"
     },
     "wilde": {
       "title": "Oscar Wilde",
       "count": 268,
-      "fetchedAt": "2026-09-13T18:19:32.345Z"
+      "fetchedAt": "2026-09-14T09:53:39.582Z"
     },
     "coelho": {
       "title": "Paulo Coelho",
       "count": 211,
-      "fetchedAt": "2026-09-13T18:19:33.225Z"
+      "fetchedAt": "2026-09-14T09:53:40.502Z"
     },
     "maya-angelou": {
       "title": "Maya Angelou",
       "count": 56,
-      "fetchedAt": "2026-09-13T18:19:34.245Z"
+      "fetchedAt": "2026-09-14T09:53:41.552Z"
     },
     "frankl": {
       "title": "Viktor Frankl",
       "count": 8,
-      "fetchedAt": "2026-09-13T18:19:35.102Z"
+      "fetchedAt": "2026-09-14T09:53:42.413Z"
     },
     "jung": {
       "title": "Carl Jung",
       "count": 110,
-      "fetchedAt": "2026-09-13T18:19:36.073Z"
+      "fetchedAt": "2026-09-14T09:53:43.357Z"
     },
     "maslow": {
       "title": "Abraham Maslow",
       "count": 19,
-      "fetchedAt": "2026-09-13T18:19:36.964Z"
+      "fetchedAt": "2026-09-14T09:53:44.257Z"
     },
     "fromm": {
       "title": "Erich Fromm",
       "count": 58,
-      "fetchedAt": "2026-09-13T18:19:37.953Z"
+      "fetchedAt": "2026-09-14T09:53:45.201Z"
     },
     "rogers": {
       "title": "Carl Rogers",
       "count": 16,
-      "fetchedAt": "2026-09-13T18:19:38.847Z"
+      "fetchedAt": "2026-09-14T09:53:51.080Z"
     },
     "brene-brown": {
       "title": "Brené Brown",
       "count": 16,
-      "fetchedAt": "2026-09-13T18:19:39.696Z"
+      "fetchedAt": "2026-09-14T09:53:51.934Z"
     },
     "carnegie": {
       "title": "Dale Carnegie",
       "count": 24,
-      "fetchedAt": "2026-09-13T18:19:40.579Z"
+      "fetchedAt": "2026-09-14T09:53:52.799Z"
     },
     "covey": {
       "title": "Stephen Covey",
       "count": 29,
-      "fetchedAt": "2026-09-13T18:19:41.469Z"
+      "fetchedAt": "2026-09-14T09:53:53.671Z"
     },
     "napoleon-hill": {
       "title": "Napoleon Hill",
       "count": 53,
-      "fetchedAt": "2026-09-13T18:19:42.357Z"
+      "fetchedAt": "2026-09-14T09:53:54.574Z"
     },
     "zig-ziglar": {
       "title": "Zig Ziglar",
       "count": 21,
-      "fetchedAt": "2026-09-13T18:19:43.214Z"
+      "fetchedAt": "2026-09-14T09:53:55.521Z"
     },
     "tony-robbins": {
       "title": "Anthony Robbins",
       "count": 15,
-      "fetchedAt": "2026-09-13T18:19:44.070Z"
+      "fetchedAt": "2026-09-14T09:53:56.377Z"
     },
     "eckhart-tolle": {
       "title": "Eckhart Tolle",
       "count": 126,
-      "fetchedAt": "2026-09-13T18:19:44.942Z"
+      "fetchedAt": "2026-09-14T09:53:57.266Z"
     },
     "james-clear": {
       "title": "James Clear",
       "count": 7,
-      "fetchedAt": "2026-09-13T18:19:45.787Z"
+      "fetchedAt": "2026-09-14T09:53:58.152Z"
     },
     "bruce-lee": {
       "title": "Bruce Lee",
       "count": 100,
-      "fetchedAt": "2026-09-13T18:19:46.719Z"
+      "fetchedAt": "2026-09-14T09:53:59.095Z"
     },
     "drucker": {
       "title": "Peter Drucker",
       "count": 152,
-      "fetchedAt": "2026-09-13T18:19:47.598Z"
+      "fetchedAt": "2026-09-14T09:54:00.009Z"
     },
     "buffett": {
       "title": "Warren Buffett",
       "count": 103,
-      "fetchedAt": "2026-09-13T18:19:48.503Z"
+      "fetchedAt": "2026-09-14T09:54:00.951Z"
     },
     "munger": {
       "title": "Charlie Munger",
       "count": 18,
-      "fetchedAt": "2026-09-13T18:19:49.414Z"
+      "fetchedAt": "2026-09-14T09:54:01.827Z"
     },
     "steve-jobs": {
       "title": "Steve Jobs",
       "count": 108,
-      "fetchedAt": "2026-09-13T18:19:50.305Z"
+      "fetchedAt": "2026-09-14T09:54:02.723Z"
     },
     "einstein": {
       "title": "Albert Einstein",
       "count": 249,
-      "fetchedAt": "2026-09-13T18:19:51.374Z"
+      "fetchedAt": "2026-09-14T09:54:03.717Z"
     },
     "churchill": {
       "title": "Winston Churchill",
       "count": 411,
-      "fetchedAt": "2026-09-13T18:19:52.420Z"
+      "fetchedAt": "2026-09-14T09:54:04.828Z"
     },
     "theodore-roosevelt": {
       "title": "Theodore Roosevelt",
       "count": 225,
-      "fetchedAt": "2026-09-13T18:19:53.449Z"
+      "fetchedAt": "2026-09-14T09:54:05.842Z"
     },
     "lincoln": {
       "title": "Abraham Lincoln",
       "count": 298,
-      "fetchedAt": "2026-09-13T18:19:54.536Z"
+      "fetchedAt": "2026-09-14T09:54:07.074Z"
     },
     "eleanor-roosevelt": {
       "title": "Eleanor Roosevelt",
       "count": 58,
-      "fetchedAt": "2026-09-13T18:19:55.436Z"
+      "fetchedAt": "2026-09-14T09:54:07.988Z"
     },
     "mandela": {
       "title": "Nelson Mandela",
       "count": 117,
-      "fetchedAt": "2026-09-13T18:19:56.422Z"
+      "fetchedAt": "2026-09-14T09:54:08.884Z"
     },
     "gandhi": {
       "title": "Mahatma Gandhi",
       "count": 215,
-      "fetchedAt": "2026-09-13T18:19:57.476Z"
+      "fetchedAt": "2026-09-14T09:54:09.897Z"
     },
     "mlk": {
       "title": "Martin Luther King Jr.",
       "count": 279,
-      "fetchedAt": "2026-09-13T18:19:58.675Z"
+      "fetchedAt": "2026-09-14T09:54:10.901Z"
     },
     "helen-keller": {
       "title": "Helen Keller",
       "count": 81,
-      "fetchedAt": "2026-09-13T18:19:59.610Z"
+      "fetchedAt": "2026-09-14T09:54:11.814Z"
     },
     "anne-frank": {
       "title": "Anne Frank",
       "count": 37,
-      "fetchedAt": "2026-09-13T18:20:00.519Z"
+      "fetchedAt": "2026-09-14T09:54:12.690Z"
     },
     "booker-t-washington": {
       "title": "Booker T. Washington",
       "count": 26,
-      "fetchedAt": "2026-09-13T18:20:01.396Z"
+      "fetchedAt": "2026-09-14T09:54:13.571Z"
     },
     "frederick-douglass": {
       "title": "Frederick Douglass",
       "count": 147,
-      "fetchedAt": "2026-09-13T18:20:02.438Z"
+      "fetchedAt": "2026-09-14T09:54:14.611Z"
     }
   }
 }
