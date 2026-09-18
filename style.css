@@ -161,3 +161,20 @@ textarea { font-family: var(--serif); resize: vertical; }
   .mark { left: 0.8rem; font-size: 4rem; }
   .dialog-inner { border-radius: 14px 14px 0 0; max-height: 92dvh; }
 }
+
+.translation {
+  margin: 1.25rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--line);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.05rem, 0.85rem + 1vw, 1.35rem);
+  line-height: 1.45;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+.translation.pending { opacity: 0.55; }
+select {
+  flex: 1; font: inherit; color: inherit; background: var(--bg);
+  border: 1px solid var(--line); border-radius: 10px; padding: 0.5rem 0.75rem;
+}

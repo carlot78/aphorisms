@@ -1,5 +1,6 @@
 import { SOURCES, GROUPS, STARTER_IDS, sourceById, customSource } from './src/sources.js';
 import { fetchSource, hash } from './src/wikiquote.js';
+import { translate, LANGUAGES, languageName } from './src/translate.js';
 
 const FRESH_MS = 7 * 24 * 3600 * 1000; // re-fetch a source after a week
 const SNAPSHOT_RETRY_MS = 24 * 3600 * 1000;
@@ -18,6 +19,7 @@ const el = {
   dialog: $('sources-dialog'), openSources: $('open-sources'), groups: $('source-groups'), enabledCount: $('enabled-count'),
   customTitle: $('custom-title'), addCustom: $('add-custom'), customHint: $('custom-hint'), ownLines: $('own-lines'),
   refreshAll: $('refresh-all'), resetSeen: $('reset-seen'), resetAll: $('reset-all'), dataStatus: $('data-status'),
+  translation: $('quote-translation'), lang: $('lang'), langHint: $('lang-hint'),
 };
 
 // ---------- storage ----------
@@ -58,6 +60,7 @@ let settings = store.get('settings', null) || {
   ownLines: '',
   salt: Math.random().toString(36).slice(2),
 };
+settings.lang ||= ''; // translation language, '' = none (added after first release)
 const saveSettings = () => store.set('settings', settings);
 
 /** All selectable sources: catalog + user-added Wikiquote pages. */
@@ -283,6 +286,66 @@ function renderQuote(quote) {
   }
   el.cite.textContent = [quote.section, quote.cite].filter(Boolean).join(' · ');
   renderFavButton();
+  renderTranslation(quote);
+}
+
+// ---------- translation ----------
+
+const MAX_TRANSLATIONS = 300;
+let translationSeq = 0; // ignore results of a translation that was superseded
+
+function cachedTranslation(quote, lang) {
+  return store.get('tr', {})[`${lang}:${quote.id}`] || '';
+}
+
+function rememberTranslation(quote, lang, text) {
+  const cache = store.get('tr', {});
+  cache[`${lang}:${quote.id}`] = text;
+  const keys = Object.keys(cache);
+  for (const k of keys.slice(0, Math.max(0, keys.length - MAX_TRANSLATIONS))) delete cache[k];
+  store.set('tr', cache);
+}
+
+/** Show `quote` translated into the chosen language under the English text. */
+async function renderTranslation(quote) {
+  const lang = settings.lang;
+  const seq = ++translationSeq;
+  el.translation.hidden = !lang;
+  if (!lang) return;
+  el.translation.setAttribute('lang', lang);
+
+  const hit = cachedTranslation(quote, lang);
+  if (hit) {
+    el.translation.textContent = hit;
+    el.translation.classList.remove('pending');
+    return;
+  }
+  el.translation.textContent = 'Translating…';
+  el.translation.classList.add('pending');
+  try {
+    const text = await translate(quote.text, lang);
+    if (seq !== translationSeq) return;
+    rememberTranslation(quote, lang, text);
+    el.translation.textContent = text;
+  } catch (err) {
+    console.warn('Translation failed:', err.message);
+    if (seq !== translationSeq) return;
+    el.translation.textContent = `Translation into ${languageName(lang)} unavailable right now.`;
+  } finally {
+    if (seq === translationSeq) el.translation.classList.remove('pending');
+  }
+}
+
+function renderLanguageSelect() {
+  const options = LANGUAGES.map((code) => [code, languageName(code)]).sort((a, b) => a[1].localeCompare(b[1]));
+  el.lang.replaceChildren(
+    new Option('No translation', ''),
+    ...options.map(([code, name]) => new Option(name, code))
+  );
+  el.lang.value = settings.lang;
+  el.langHint.textContent = settings.lang
+    ? `Translated automatically (on-device when your browser supports it, otherwise via MyMemory / Google). The English original always stays.`
+    : '';
 }
 
 const isFav = (q) => store.get('favs', []).some((f) => f.id === q.id);
@@ -429,6 +492,7 @@ function bind() {
     renderSources();
     renderDataStatus();
     el.ownLines.value = settings.ownLines;
+    renderLanguageSelect();
     el.dialog.showModal();
   });
   el.emptyAction.addEventListener('click', () => el.openSources.click());
@@ -477,11 +541,19 @@ function bind() {
 
   el.another.addEventListener('click', () => showToday({ replace: true }));
 
+  el.lang.addEventListener('change', () => {
+    settings.lang = el.lang.value;
+    saveSettings();
+    renderLanguageSelect();
+    if (current) renderTranslation(current);
+  });
+
   el.copy.addEventListener('click', async () => {
     if (!current) return;
     const who = findSource(current.sourceId)?.name || current.source;
     try {
-      await navigator.clipboard.writeText(`“${current.text}” — ${who}`);
+      const translated = settings.lang ? cachedTranslation(current, settings.lang) : '';
+      await navigator.clipboard.writeText(`“${current.text}” — ${who}` + (translated ? `\n\n${translated}` : ''));
       setStatus('Copied.');
       setTimeout(() => setStatus(''), 1500);
     } catch {

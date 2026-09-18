@@ -25,6 +25,7 @@
     <article class="card" id="card" hidden>
       <p class="mark" aria-hidden="true">“</p>
       <blockquote class="quote" id="quote-text"></blockquote>
+      <p class="translation" id="quote-translation" hidden></p>
       <footer class="attribution">
         <a class="source" id="quote-source" target="_blank" rel="noopener"></a>
         <span class="cite" id="quote-cite"></span>
@@ -73,6 +74,13 @@
         <button type="button" class="btn" id="add-custom">Add</button>
       </div>
       <p class="muted small" id="custom-hint"></p>
+
+      <h3>Translation</h3>
+      <p class="muted small">Show the day's thought in another language as well. The English original is always kept.</p>
+      <div class="row">
+        <select id="lang" aria-label="Translation language"></select>
+      </div>
+      <p class="muted small" id="lang-hint"></p>
 
       <h3>My own lines</h3>
       <p class="muted small">One thought per line. These stay in this browser only.</p>
