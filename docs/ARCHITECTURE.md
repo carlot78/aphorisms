@@ -34,6 +34,7 @@ The three original owner requirements are:
 | FR-15 | If today's quote comes from a source that was just disabled (or own lines were emptied), a new quote is picked when the settings dialog closes. | R1 | dialog `close` handler |
 | FR-16 | The quote card links the source name to the Wikiquote page URL and shows section path and citation (`section · cite`). | R2 (attribution) | `renderQuote` |
 | FR-17 | Progress and error feedback via a live-region status line (`Fetching X… (n/m)`, `Couldn't load: …`, `Copied.`, `Storage is full — …`). | implemented behaviour | `setStatus` |
+| FR-18 | Optional daily **push notification** with the day's thought (plus translation). The browser subscribes via Web Push (VAPID) in Settings → *Notifications* and shows a configuration blob the owner stores as the `PUSH_CONFIG` repository secret; the `daily-push.yml` workflow runs hourly and, at the configured local hour, picks a quote from the configured sources in the snapshot (same bucket-per-source rule, seeded by the date), translates it, and sends it. The service worker shows the notification and stores the payload in the `aph-push` cache; on the next open the app adopts that quote for the day (once per day, so "Another" still works) and tapping the notification focuses/opens the app. | R1 ("present daily"), R3 | `src/push.js`, `sw.js` (`push`, `notificationclick`), `scripts/push.mjs`, `renderNotifications`, `adoptPushedQuote` |
 
 ### 2.2 Non-functional requirements
 
