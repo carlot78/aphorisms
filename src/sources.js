@@ -2,16 +2,20 @@
 // page title (verified to exist); `name` is what the UI shows.
 // `starter: true` marks sources enabled on first launch.
 
-export const GROUPS = [
-  'Stoicism',
-  'Eastern wisdom',
-  'Classical philosophy',
-  'Modern philosophy',
-  'Aphorists & essayists',
-  'Psychology',
-  'Self-improvement',
-  'Leaders & lives',
+// Topics group the sources. Selecting a topic enables all of its sources.
+export const TOPICS = [
+  { name: 'Stoicism', icon: '🏛️', blurb: 'Marcus Aurelius, Seneca, Epictetus — on what is in our control' },
+  { name: 'Eastern wisdom', icon: '☯️', blurb: 'Taoism, Buddhism, Zen, Vedanta and Sufi poetry' },
+  { name: 'Classical philosophy', icon: '🏺', blurb: 'Socrates, Aristotle, Epicurus — the good life, examined' },
+  { name: 'Modern philosophy', icon: '💭', blurb: 'From Montaigne and Emerson to Camus and Taleb' },
+  { name: 'Aphorists & essayists', icon: '✒️', blurb: 'Maxims, wit and short wisdom from great writers' },
+  { name: 'Psychology', icon: '🧠', blurb: 'Meaning, growth and the inner life' },
+  { name: 'Self-improvement', icon: '🌱', blurb: 'Habits, focus and effectiveness' },
+  { name: 'Leaders & lives', icon: '🕊️', blurb: 'Courage and character from lives well lived' },
 ];
+export const CUSTOM_TOPIC = { name: 'Custom', icon: '➕', blurb: 'Wikiquote pages you added' };
+
+export const GROUPS = TOPICS.map((t) => t.name);
 
 export const SOURCES = [
   // Stoicism

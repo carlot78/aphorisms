@@ -1,6 +1,7 @@
-import { SOURCES, GROUPS, STARTER_IDS, sourceById, customSource } from './src/sources.js';
+import { SOURCES, TOPICS, CUSTOM_TOPIC, STARTER_IDS, customSource } from './src/sources.js';
 import { fetchSource, hash } from './src/wikiquote.js';
 import { translate, LANGUAGES, languageName } from './src/translate.js';
+import { flagSvg } from './src/flags.js';
 
 const FRESH_MS = 7 * 24 * 3600 * 1000; // re-fetch a source after a week
 const SNAPSHOT_RETRY_MS = 24 * 3600 * 1000;
@@ -19,7 +20,8 @@ const el = {
   dialog: $('sources-dialog'), openSources: $('open-sources'), groups: $('source-groups'), enabledCount: $('enabled-count'),
   customTitle: $('custom-title'), addCustom: $('add-custom'), customHint: $('custom-hint'), ownLines: $('own-lines'),
   refreshAll: $('refresh-all'), resetSeen: $('reset-seen'), resetAll: $('reset-all'), dataStatus: $('data-status'),
-  translation: $('quote-translation'), lang: $('lang'), langHint: $('lang-hint'),
+  translation: $('quote-translation'), langHint: $('lang-hint'), flagGrid: $('flag-grid'), topicGrid: $('topic-grid'),
+  tabs: [...document.querySelectorAll('.tabs [role=tab]')], panels: [...document.querySelectorAll('.panel[data-panel]')],
 };
 
 // ---------- storage ----------
@@ -336,16 +338,240 @@ async function renderTranslation(quote) {
   }
 }
 
-function renderLanguageSelect() {
-  const options = LANGUAGES.map((code) => [code, languageName(code)]).sort((a, b) => a[1].localeCompare(b[1]));
-  el.lang.replaceChildren(
-    new Option('No translation', ''),
-    ...options.map(([code, name]) => new Option(name, code))
+// ---------- settings UI: topics, sources, translation ----------
+
+const THUMB_TTL = 30 * 24 * 3600 * 1000;
+const TABS = ['topics', 'sources', 'translation'];
+
+/**
+ * Portrait thumbnails come from Wikipedia's `pageimages` API (the Wikiquote
+ * titles match Wikipedia's, redirects included). Cached for a month; a source
+ * with no image is cached as '' so we don't ask again.
+ */
+async function ensureThumbs(sources) {
+  const thumbs = store.get('thumbs', {});
+  const todo = sources.filter((s) => !thumbs[s.id] || Date.now() - thumbs[s.id].at > THUMB_TTL);
+  if (!todo.length) return false;
+  for (let i = 0; i < todo.length; i += 50) {
+    const batch = todo.slice(i, i + 50);
+    const params = new URLSearchParams({
+      action: 'query', prop: 'pageimages', piprop: 'thumbnail', pithumbsize: '96', redirects: '1',
+      format: 'json', formatversion: '2', origin: '*', titles: batch.map((s) => s.title).join('|'),
+    });
+    try {
+      const res = await fetch(`https://en.wikipedia.org/w/api.php?${params}`);
+      const q = (await res.json()).query || {};
+      const alias = new Map([...(q.normalized || []), ...(q.redirects || [])].map((r) => [r.from, r.to]));
+      const resolve = (t) => { for (let n = 0; n < 5 && alias.has(t); n++) t = alias.get(t); return t; };
+      const byTitle = new Map((q.pages || []).map((p) => [p.title, p]));
+      for (const s of batch) thumbs[s.id] = { url: byTitle.get(resolve(s.title))?.thumbnail?.source || '', at: Date.now() };
+    } catch (err) {
+      console.warn('Thumbnail lookup failed:', err.message);
+      return false;
+    }
+  }
+  store.set('thumbs', thumbs);
+  return true;
+}
+
+const initials = (name) => name.split(/\s+/).filter((w) => /^[A-Za-zÀ-ž]/.test(w)).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+
+function avatarEl(src, thumbs) {
+  const wrap = document.createElement('span');
+  wrap.className = 'avatar';
+  const url = thumbs[src.id]?.url;
+  if (url) {
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.referrerPolicy = 'no-referrer';
+    img.addEventListener('error', () => { img.remove(); wrap.textContent = initials(src.name); });
+    wrap.append(img);
+  } else {
+    wrap.textContent = initials(src.name);
+  }
+  return wrap;
+}
+
+const topicsWithCustom = () => [...TOPICS, ...(settings.customs.length ? [CUSTOM_TOPIC] : [])];
+
+function topicState(items) {
+  const on = items.filter((s) => settings.enabled.includes(s.id)).length;
+  return { on, state: on === 0 ? 'none' : on === items.length ? 'all' : 'some' };
+}
+
+function renderTopics() {
+  el.topicGrid.replaceChildren(
+    ...topicsWithCustom().map((topic) => {
+      const items = allSources().filter((s) => s.group === topic.name);
+      const { on, state } = topicState(items);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'topic';
+      btn.dataset.state = state;
+      btn.setAttribute('aria-pressed', state === 'all' ? 'true' : state === 'some' ? 'mixed' : 'false');
+      btn.title = state === 'all' ? 'Click to deselect all' : 'Click to select all';
+      btn.innerHTML = '<span class="icon" aria-hidden="true"></span><span class="body"><span class="name"></span><span class="blurb"></span><span class="meta"></span></span>';
+      btn.querySelector('.icon').textContent = topic.icon;
+      btn.querySelector('.name').textContent = topic.name;
+      btn.querySelector('.blurb').textContent = topic.blurb;
+      btn.querySelector('.meta').textContent = `${on} of ${items.length} selected`;
+      btn.addEventListener('click', () => {
+        const turnOn = state !== 'all';
+        for (const s of items) setEnabled(s.id, turnOn);
+        renderTopics();
+        renderSources();
+      });
+      return btn;
+    })
   );
-  el.lang.value = settings.lang;
+  renderEnabledCount();
+}
+
+function renderSources() {
+  const thumbs = store.get('thumbs', {});
+  el.groups.replaceChildren(
+    ...topicsWithCustom().map((topic) => {
+      const items = allSources().filter((s) => s.group === topic.name);
+      const wrap = document.createElement('div');
+      wrap.className = 'group';
+      const h = document.createElement('h4');
+      h.textContent = `${topic.icon} ${topic.name}`;
+      const tools = document.createElement('span');
+      tools.className = 'group-tools';
+      for (const [label, on] of [['all', true], ['none', false]]) {
+        const a = document.createElement('a');
+        a.textContent = label;
+        a.addEventListener('click', () => {
+          for (const s of items) setEnabled(s.id, on);
+          renderSources();
+          renderTopics();
+        });
+        tools.append(a);
+      }
+      h.append(tools);
+      const grid = document.createElement('div');
+      grid.className = 'people';
+      for (const s of items) {
+        const label = document.createElement('label');
+        label.className = 'person';
+        label.title = s.blurb || '';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = settings.enabled.includes(s.id);
+        input.addEventListener('change', () => {
+          setEnabled(s.id, input.checked);
+          renderEnabledCount();
+          renderTopics();
+        });
+        const text = document.createElement('span');
+        text.className = 'text';
+        const name = document.createElement('span');
+        name.className = 'name';
+        name.textContent = s.name;
+        const blurb = document.createElement('span');
+        blurb.className = 'blurb';
+        const cached = loadCached(s.id);
+        blurb.textContent = [s.blurb, cached ? `${cached.quotes.length} quotes` : ''].filter(Boolean).join(' · ');
+        text.append(name, blurb);
+        label.append(input, avatarEl(s, thumbs), text);
+        if (s.custom) {
+          const rm = document.createElement('button');
+          rm.type = 'button';
+          rm.className = 'rm';
+          rm.textContent = '✕';
+          rm.title = 'Remove this source';
+          rm.addEventListener('click', (e) => {
+            e.preventDefault();
+            settings.customs = settings.customs.filter((c) => c.id !== s.id);
+            setEnabled(s.id, false);
+            store.remove('src.' + s.id);
+            sourceCache.delete(s.id);
+            renderSources();
+            renderTopics();
+          });
+          label.append(rm);
+        }
+        grid.append(label);
+      }
+      wrap.append(h, grid);
+      return wrap;
+    })
+  );
+  renderEnabledCount();
+}
+
+function renderEnabledCount() {
+  el.enabledCount.textContent = `${settings.enabled.length} selected`;
+}
+
+function renderLanguageGrid() {
+  const options = LANGUAGES.map((code) => ({ code, native: languageName(code, code), local: languageName(code) }))
+    .sort((a, b) => a.native.localeCompare(b.native));
+  const card = ({ code, native, local }, flag) => {
+    const label = document.createElement('label');
+    label.className = 'flag';
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'lang';
+    input.value = code;
+    input.checked = settings.lang === code;
+    input.addEventListener('change', () => {
+      settings.lang = code;
+      saveSettings();
+      renderLangHint();
+      if (current) renderTranslation(current);
+    });
+    const art = document.createElement('span');
+    art.className = 'art';
+    art.innerHTML = flag; // trusted: our own SVG module
+    const text = document.createElement('span');
+    text.className = 'text';
+    const n = document.createElement('span');
+    n.className = 'native';
+    n.textContent = native;
+    text.append(n);
+    if (local && local.toLowerCase() !== native.toLowerCase()) {
+      const l = document.createElement('span');
+      l.className = 'local';
+      l.textContent = local;
+      text.append(l);
+    }
+    label.append(input, art, text);
+    return label;
+  };
+  el.flagGrid.replaceChildren(
+    card({ code: '', native: 'English only', local: 'No translation' }, '<span class="none" aria-hidden="true">—</span>'),
+    ...options.map((o) => card(o, flagSvg(o.code)))
+  );
+  renderLangHint();
+}
+
+function renderLangHint() {
   el.langHint.textContent = settings.lang
-    ? `Translated automatically (on-device when your browser supports it, otherwise via MyMemory / Google). The English original always stays.`
+    ? 'Translated automatically (on-device when your browser supports it, otherwise via MyMemory / Google). The English original always stays.'
     : '';
+}
+
+function showTab(name) {
+  if (!TABS.includes(name)) name = TABS[0];
+  for (const tab of el.tabs) tab.setAttribute('aria-selected', String(tab.dataset.tab === name));
+  for (const panel of el.panels) panel.hidden = panel.dataset.panel !== name;
+  store.set('ui.tab', name);
+}
+
+async function openSettings(tab) {
+  renderTopics();
+  renderSources();
+  renderLanguageGrid();
+  renderDataStatus();
+  el.ownLines.value = settings.ownLines;
+  showTab(tab || store.get('ui.tab', 'topics'));
+  el.dialog.showModal();
+  // Portraits load in the background; re-render the list once they arrive.
+  if ((await ensureThumbs(allSources())) && el.dialog.open) renderSources();
 }
 
 const isFav = (q) => store.get('favs', []).some((f) => f.id === q.id);
@@ -393,75 +619,6 @@ function renderLists() {
   el.historyList.replaceChildren(...history.map((h) => quoteItem(h.quote, `${h.date} · ${findSource(h.quote.sourceId)?.name || h.quote.source}`)));
 }
 
-function renderSources() {
-  const groups = [...GROUPS, ...(settings.customs.length ? ['Custom'] : [])];
-  el.groups.replaceChildren(
-    ...groups.map((group) => {
-      const items = allSources().filter((s) => s.group === group);
-      const wrap = document.createElement('div');
-      wrap.className = 'group';
-      const h = document.createElement('h4');
-      h.textContent = group;
-      const tools = document.createElement('span');
-      tools.className = 'group-tools';
-      for (const [label, on] of [['all', true], ['none', false]]) {
-        const a = document.createElement('a');
-        a.textContent = label;
-        a.addEventListener('click', () => {
-          for (const s of items) setEnabled(s.id, on);
-          renderSources();
-        });
-        tools.append(a);
-      }
-      h.append(tools);
-      const chips = document.createElement('div');
-      chips.className = 'chips';
-      for (const s of items) {
-        const label = document.createElement('label');
-        label.className = 'chip';
-        label.title = s.blurb || '';
-        const input = document.createElement('input');
-        input.type = 'checkbox';
-        input.checked = settings.enabled.includes(s.id);
-        input.addEventListener('change', () => {
-          setEnabled(s.id, input.checked);
-          renderEnabledCount();
-        });
-        label.append(input, document.createTextNode(s.name));
-        const cached = loadCached(s.id);
-        if (cached) {
-          const n = document.createElement('span');
-          n.className = 'n';
-          n.textContent = cached.quotes.length;
-          label.append(n);
-        }
-        if (s.custom) {
-          const rm = document.createElement('span');
-          rm.className = 'rm';
-          rm.textContent = '✕';
-          rm.title = 'Remove this source';
-          rm.addEventListener('click', (e) => {
-            e.preventDefault();
-            settings.customs = settings.customs.filter((c) => c.id !== s.id);
-            setEnabled(s.id, false);
-            store.remove('src.' + s.id);
-            sourceCache.delete(s.id);
-            renderSources();
-          });
-          label.append(rm);
-        }
-        chips.append(label);
-      }
-      wrap.append(h, chips);
-      return wrap;
-    })
-  );
-  renderEnabledCount();
-}
-
-function renderEnabledCount() {
-  el.enabledCount.textContent = `${settings.enabled.length} selected`;
-}
 
 function renderDataStatus() {
   let quotes = 0;
@@ -488,14 +645,9 @@ function setEnabled(id, on) {
 // ---------- events ----------
 
 function bind() {
-  el.openSources.addEventListener('click', () => {
-    renderSources();
-    renderDataStatus();
-    el.ownLines.value = settings.ownLines;
-    renderLanguageSelect();
-    el.dialog.showModal();
-  });
-  el.emptyAction.addEventListener('click', () => el.openSources.click());
+  el.openSources.addEventListener('click', () => openSettings());
+  el.emptyAction.addEventListener('click', () => openSettings('topics'));
+  for (const tab of el.tabs) tab.addEventListener('click', () => showTab(tab.dataset.tab));
 
   el.dialog.addEventListener('close', async () => {
     settings.ownLines = el.ownLines.value;
@@ -526,6 +678,8 @@ function bind() {
       el.customTitle.value = '';
       el.customHint.textContent = `Added ${data.title} (${data.quotes.length} quotes).`;
       renderSources();
+      renderTopics();
+      ensureThumbs([src]).then((changed) => { if (changed && el.dialog.open) renderSources(); });
     } catch (err) {
       el.customHint.textContent = `Couldn't find a usable Wikiquote page for “${title}”. (${err.message})`;
     } finally {
@@ -540,13 +694,6 @@ function bind() {
   });
 
   el.another.addEventListener('click', () => showToday({ replace: true }));
-
-  el.lang.addEventListener('change', () => {
-    settings.lang = el.lang.value;
-    saveSettings();
-    renderLanguageSelect();
-    if (current) renderTranslation(current);
-  });
 
   el.copy.addEventListener('click', async () => {
     if (!current) return;

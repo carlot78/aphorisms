@@ -17,7 +17,8 @@ The three original owner requirements are:
 | ID | Requirement | Traces to | Implemented in |
 | --- | --- | --- | --- |
 | FR-1 | Show exactly one quote per calendar day; the pick is held for the whole day (`aph.today` keyed by `todayKey()`, `YYYY-MM-DD` in local time). | R1 | `showToday` in `app.js` |
-| FR-2 | The user selects sources from a curated catalog grouped into 8 groups (`GROUPS`); a starter set (`STARTER_IDS`: Marcus Aurelius, Seneca, Epictetus, Laozi, The Buddha, Emerson, Thoreau) is enabled on first launch. Groups offer "all" / "none" toggles. | R1 | `src/sources.js`, `renderSources` |
+| FR-2 | The user selects sources from a curated catalog grouped into 8 topics (`TOPICS`, each with an emoji icon and blurb); a starter set (`STARTER_IDS`: Marcus Aurelius, Seneca, Epictetus, Laozi, The Buddha, Emerson, Thoreau) is enabled on first launch. The settings dialog has three tabs: **Topics** (one card per topic; a click toggles every source in it; state `all` / `some` / `none`), **Sources** (per-person cards with a portrait miniature, name, blurb and quote count; "all" / "none" per group) and **Translation**. The last open tab is remembered. | R1 | `src/sources.js`, `renderTopics`, `renderSources`, `showTab` |
+| FR-2a | Portrait miniatures come from Wikipedia's `pageimages` API (batches of 50 titles, redirects and normalisation resolved), cached in `aph.thumbs` for 30 days; a source without an image shows its initials. | R1 (usability) | `ensureThumbs`, `avatarEl` |
 | FR-3 | Quotes are fetched autonomously from Wikiquote with no user-maintained quote list; each source is re-fetched after `FRESH_MS` (7 days). | R2 | `ensureSources`, `refreshSource`, `src/wikiquote.js` |
 | FR-4 | "Another" replaces today's pick with a different one (`showToday({ replace: true })`, seeded with `Date.now()`). | R1 ("continuously refresh") | `el.another` handler |
 | FR-5 | No quote repeats until every quote of the enabled pool has been shown (`aph.seen`), after which the seen list is cleared automatically. | R1 | `pickQuote`, `markSeen` |
@@ -27,7 +28,7 @@ The three original owner requirements are:
 | FR-9 | Copy the quote to the clipboard as `“text” — Source`, followed by the cached translation when one exists. | implemented behaviour | `el.copy` handler |
 | FR-10 | Add any Wikiquote page by title as a custom source (`customSource(title)`, id `custom:<slug>`); the page is looked up live before being added; custom sources can be removed. | R1, R2 | `el.addCustom` handler |
 | FR-11 | "My own lines": free-text, one thought per line (lines longer than 3 characters), participate in the daily pick as source `own`. | R1 | `ownSource` |
-| FR-12 | Optional translation into one of `LANGUAGES` (24 codes); the English original is always displayed, the translation rendered under it in `#quote-translation` with a `lang` attribute. Selecting "No translation" (`''`) hides it. | R3 | `renderTranslation`, `src/translate.js` |
+| FR-12 | Optional translation into one of `LANGUAGES` (24 codes); the English original is always displayed, the translation rendered under it in `#quote-translation` with a `lang` attribute. Languages are picked from a grid of cards showing an inline SVG flag (`src/flags.js`), the language's native name and its name in the viewer's locale; "English only" (`''`) hides the translation. | R3 | `renderTranslation`, `renderLanguageGrid`, `src/translate.js` |
 | FR-13 | Data actions: "Refresh from Wikiquote now" (`ensureSources({ force: true })`), "Forget what I've seen" (clears `aph.seen`), "Reset everything" (removes every `aph.*` key after `confirm()` and reloads). | implemented behaviour | `el.refreshAll`, `el.resetSeen`, `el.resetAll` |
 | FR-14 | New-day detection while the tab stays open: on `visibilitychange` to `visible`, if `aph.today.date !== todayKey()` the date label and quote are refreshed. | R1 | `bind()` |
 | FR-15 | If today's quote comes from a source that was just disabled (or own lines were emptied), a new quote is picked when the settings dialog closes. | R1 | dialog `close` handler |
@@ -112,16 +113,19 @@ flowchart LR
 Single page. Header (brand, date, sources button), the quote card (`#quote-text`, `#quote-translation`, source link, citation), an empty-state section, action buttons (`#another`, `#copy`, `#fav`), a `<details>` drawer for favourites and past days, a live-region `#status`, and a native `<dialog id="sources-dialog">` holding: source groups, custom page input, translation `<select id="lang">`, own-lines `<textarea>`, and the three data buttons. Loads `app.js` as `type="module"`, links `manifest.webmanifest` and `icon.svg`.
 
 #### `style.css`
-CSS custom properties for a warm light theme, overridden under `@media (prefers-color-scheme: dark)`. Serif face for quote text and translation; `clamp()` type scale, `.quote.long` for texts over 280 characters; `.translation` styled italic with a dashed top rule, `.pending` dims it while loading; chip-style checkboxes (`.chip:has(input:checked)`); mobile tweaks below 600 px.
+CSS custom properties for a warm light theme, overridden under `@media (prefers-color-scheme: dark)`. Serif face for quote text and translation; `clamp()` type scale, `.quote.long` for texts over 280 characters; `.translation` styled italic with a dashed top rule, `.pending` dims it while loading; settings dialog with sticky `.tabs`, `.topic` cards (`data-state`), `.person` cards with a round `.avatar`, and `.flag` cards (`:has(input:checked)` marks the selected state with the `--accent-soft` background); mobile tweaks below 600 px.
 
 #### `app.js` (entry point)
-Owns UI state, persistence, source loading and picking. Key functions: `store` (`get`/`set`/`remove`/`keys`, all keys prefixed `aph.`), `todayKey`, `mulberry32`, `loadCached`, `sample`, `storeSource`, `fetchSnapshot`, `refreshSource`, `ownSource`, `ensureSources`, `pool`, `pickQuote`, `markSeen`, `recordHistory`, `showToday`, `renderQuote`, `renderTranslation`, `cachedTranslation`, `rememberTranslation`, `renderLanguageSelect`, `renderLists`, `renderSources`, `renderDataStatus`, `setEnabled`, `bind`, `init`. Constants: `FRESH_MS`, `SNAPSHOT_RETRY_MS`, `MAX_QUOTES_PER_SOURCE`, `MAX_SEEN`, `MAX_HISTORY`, `CONCURRENCY`, `OWN_ID = 'own'`, `MAX_TRANSLATIONS`.
+Owns UI state, persistence, source loading and picking. Key functions: `store` (`get`/`set`/`remove`/`keys`, all keys prefixed `aph.`), `todayKey`, `mulberry32`, `loadCached`, `sample`, `storeSource`, `fetchSnapshot`, `refreshSource`, `ownSource`, `ensureSources`, `pool`, `pickQuote`, `markSeen`, `recordHistory`, `showToday`, `renderQuote`, `renderTranslation`, `cachedTranslation`, `rememberTranslation`, `renderLanguageGrid`, `renderLangHint`, `renderLists`, `renderTopics`, `renderSources`, `ensureThumbs`, `avatarEl`, `showTab`, `openSettings`, `renderDataStatus`, `setEnabled`, `bind`, `init`. Constants: `FRESH_MS`, `SNAPSHOT_RETRY_MS`, `MAX_QUOTES_PER_SOURCE`, `MAX_SEEN`, `MAX_HISTORY`, `CONCURRENCY`, `OWN_ID = 'own'`, `MAX_TRANSLATIONS`, `THUMB_TTL` (30 days), `TABS`.
 
 #### `src/wikiquote.js` (shared browser/Node)
 Exports `API`, `apiUrl(title)`, `fetchSource(title, { fetchImpl, headers })`, `extractQuotes(html, sourceTitle)`, `looksEnglish(text)`, `toText(html)`, `hash(str)`. Internal: `listItems`, `splitItem`, `pickText`, `cleanQuote`, `EXCLUDED_HEADING`, `MIN_LEN = 30`, `MAX_LEN = 700`, `ENGLISH_WORDS`, `ENTITIES`. No DOM, no dependencies; `fetchImpl` defaults to `globalThis.fetch`.
 
 #### `src/sources.js`
-Exports `GROUPS` (8 names), `SOURCES` (79 entries `{ id, title, name, group, blurb, starter? }` where `title` is the exact Wikiquote page title), `STARTER_IDS`, `sourceById(id)`, `customSource(title)` (returns `{ id: 'custom:<slug>', title, name, group: 'Custom', blurb: 'Wikiquote page', custom: true }`).
+Exports `TOPICS` (8 entries `{ name, icon, blurb }`), `CUSTOM_TOPIC`, `GROUPS` (the topic names, kept for compatibility), `SOURCES` (79 entries `{ id, title, name, group, blurb, starter? }` where `title` is the exact Wikiquote page title), `STARTER_IDS`, `sourceById(id)`, `customSource(title)` (returns `{ id: 'custom:<slug>', title, name, group: 'Custom', blurb: 'Wikiquote page', custom: true }`).
+
+#### `src/flags.js`
+Exports `flagSvg(code)`: simplified inline-SVG flags (60×40 viewBox) composed from a few primitives (`horizontal`, `vertical`, `nordic`, `star`, …) for every code in `LANGUAGES`. Used instead of emoji flags because Windows renders those as letter pairs.
 
 #### `src/translate.js`
 Exports `LANGUAGES` (24 BCP-47 codes), `languageName(code, locale)` (via `Intl.DisplayNames`, falls back to the code), `chunk(text, max)`, `translate(text, lang)`. Internal providers `viaBuiltin`, `viaMyMemory`, `viaGoogle` in `PROVIDERS` order; helpers `withTimeout`, `timeout`, `MYMEMORY_MAX = 450`.
@@ -133,7 +137,7 @@ Node 22 script (no dependencies). Imports `SOURCES` and `fetchSource`, iterates 
 Scheduled GitHub Action that runs the fetch script and commits the snapshot (see 3.9).
 
 #### `sw.js`
-Service worker: precaches the `SHELL` list under cache `VERSION = 'aphorisms-v3'`, deletes older caches on activate, serves same-origin GET requests stale-while-revalidate (see 3.8).
+Service worker: precaches the `SHELL` list under cache `VERSION = 'aphorisms-v4'`, deletes older caches on activate, serves same-origin GET requests stale-while-revalidate (see 3.8).
 
 #### `manifest.webmanifest`
 PWA manifest: `name`/`short_name` "Aphorisms", `start_url` and `scope` `./`, `display: standalone`, background/theme `#f6f1e7`, single SVG icon `any maskable`.
@@ -249,13 +253,15 @@ All keys live in `localStorage` with the `aph.` prefix, JSON-encoded, accessed o
 | `aph.history` | `[{ date, quote }]`, newest first, one per date | `MAX_HISTORY = 90` |
 | `aph.favs` | `Quote[]`, newest first | Uncapped; toggled by the Save button, removable from the drawer. |
 | `aph.tr` | `{ "<lang>:<quoteId>": translatedText }` | `MAX_TRANSLATIONS = 300` |
+| `aph.thumbs` | `{ "<sourceId>": { url, at } }` — Wikipedia thumbnail URL (`''` when none) | Re-queried after `THUMB_TTL` = 30 days |
+| `aph.ui.tab` | `"topics"`, `"sources"` or `"translation"` — last open settings tab | — |
 
 "Reset everything" iterates `store.keys('')` and removes every `aph.*` key, then reloads.
 
 ### 3.8 Offline / PWA
 
 - `app.js` registers `sw.js` when `serviceWorker` exists and the protocol is not `file:`.
-- **Install**: `caches.open('aphorisms-v3').addAll(SHELL)` where `SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'manifest.webmanifest', 'icon.svg']`, then `skipWaiting()`.
+- **Install**: `caches.open('aphorisms-v4').addAll(SHELL)` where `SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'src/flags.js', 'manifest.webmanifest', 'icon.svg']`, then `skipWaiting()`.
 - **Activate**: every cache whose name is not `VERSION` is deleted, then `clients.claim()`. Bumping `VERSION` is how a shell update is rolled out.
 - **Fetch**: only same-origin `GET` requests are handled (`url.origin !== location.origin` → return, so Wikiquote, MyMemory and Google calls are never cached and never intercepted). Strategy is stale-while-revalidate: respond with the cached copy if present, otherwise the network response; in both cases the network response, when `ok`, is written back to the cache. This also covers `data/sources/*.json`, so a snapshot fetched once is available offline. If the network fails and nothing is cached, the promise resolves to `undefined` and the request errors normally.
 - Quote data itself is not in the SW cache; it lives in `localStorage`, which is why the shell alone suffices for offline use.
@@ -304,7 +310,7 @@ python -m http.server 8080        # serve locally (ES modules need HTTP, not fil
 
 ## 5. Extending the project
 
-**Add a catalog source.** Append an object to `SOURCES` in `src/sources.js`: `{ id: 'kebab-id', title: '<exact Wikiquote page title>', name: '<display name>', group: '<one of GROUPS>', blurb: '<tooltip>', starter?: true }`. Verify the title resolves (`node scripts/fetch.mjs kebab-id` prints the quote count) and commit the resulting `data/sources/kebab-id.json` or let the Monday Action produce it. To add a group, add its name to `GROUPS` (order there is the display order). Users can add pages without code changes via "Add any Wikiquote page".
+**Add a catalog source.** Append an object to `SOURCES` in `src/sources.js`: `{ id: 'kebab-id', title: '<exact Wikiquote page title>', name: '<display name>', group: '<a TOPICS name>', blurb: '<tooltip>', starter?: true }`. Verify the title resolves (`node scripts/fetch.mjs kebab-id` prints the quote count) and commit the resulting `data/sources/kebab-id.json` or let the Monday Action produce it. To add a topic, append `{ name, icon, blurb }` to `TOPICS` (order there is the display order). Users can add pages without code changes via "Add any Wikiquote page".
 
 **Add a translation language.** Add the BCP-47 code to `LANGUAGES` in `src/translate.js`. Names come from `Intl.DisplayNames`, so no label is needed. Check the code is accepted by MyMemory's `langpair` and Google's `tl`; region suffixes are stripped for the built-in Translator (`lang.split('-')[0]`).
 
@@ -312,6 +318,6 @@ python -m http.server 8080        # serve locally (ES modules need HTTP, not fil
 
 **Add a translation provider.** Implement `async function viaX(text, lang)` in `src/translate.js` returning the translated string or throwing; use `timeout(ms)` / `withTimeout` for network or promise guards and `chunk(text, max)` if the API has a length limit. Insert it at the desired position in `PROVIDERS`. `translate` already handles fallthrough, the "unchanged output" check and error aggregation; `app.js` needs no change. If the provider is a cross-origin API, no service-worker change is needed either (non-same-origin requests are not intercepted).
 
-**Ship a shell update.** Bump `VERSION` in `sw.js` (e.g. `aphorisms-v3`) and, if new static files are added, list them in `SHELL`.
+**Ship a shell update.** Bump `VERSION` in `sw.js` (e.g. `aphorisms-v4`) and, if new static files are added, list them in `SHELL`.
 
 **Add a new persistent setting.** Extend the `settings` object in `app.js` with a default assignment after `store.get('settings', …)` (as done for `settings.lang ||= ''`) so existing installs are migrated on load, and call `saveSettings()` when it changes.

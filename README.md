@@ -9,10 +9,10 @@ maintaining a quote list.
 
 ## How it works
 
-- **Sources** — a curated catalog of ~80 authors and books (Stoics, Eastern
-  wisdom, philosophers, psychologists, modern self-improvement writers…).
-  Tick the ones you want; add any other Wikiquote page by title; or paste your
-  own lines.
+- **Sources** — a curated catalog of ~80 authors and books in 8 topics (Stoics,
+  Eastern wisdom, philosophers, psychologists, modern self-improvement
+  writers…). Pick whole topics at once, or individual people (with their
+  portraits); add any other Wikiquote page by title; or paste your own lines.
 - **Autonomous retrieval** — the browser calls the Wikiquote API directly,
   parses the quote lists, and caches them locally for a week. A GitHub Action
   ([`refresh-quotes.yml`](.github/workflows/refresh-quotes.yml)) also runs

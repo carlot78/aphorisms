@@ -59,40 +59,51 @@
   <dialog id="sources-dialog" class="dialog">
     <form method="dialog" class="dialog-inner">
       <header class="dialog-head">
-        <h2>Sources</h2>
+        <h2>Settings</h2>
         <span class="muted" id="enabled-count"></span>
         <button class="icon-btn" value="close" aria-label="Close">✕</button>
       </header>
 
-      <p class="muted small">Tick what you want to hear from. Quotes are pulled from <a href="https://en.wikiquote.org" target="_blank" rel="noopener">Wikiquote</a> automatically and refreshed every week.</p>
+      <nav class="tabs" role="tablist" aria-label="Settings sections">
+        <button type="button" role="tab" data-tab="topics" aria-selected="true">Topics</button>
+        <button type="button" role="tab" data-tab="sources" aria-selected="false">Sources</button>
+        <button type="button" role="tab" data-tab="translation" aria-selected="false">Translation</button>
+      </nav>
 
-      <div id="source-groups"></div>
+      <section class="panel" data-panel="topics" role="tabpanel">
+        <p class="muted small">Pick whole areas at once. Tap a topic to hear from everyone in it; fine-tune individual voices under <em>Sources</em>.</p>
+        <div class="topic-grid" id="topic-grid"></div>
+      </section>
 
-      <h3>Add any Wikiquote page</h3>
-      <div class="row">
-        <input type="text" id="custom-title" placeholder="e.g. Marcus Aurelius, Walden, Stoicism" aria-label="Wikiquote page title">
-        <button type="button" class="btn" id="add-custom">Add</button>
-      </div>
-      <p class="muted small" id="custom-hint"></p>
+      <section class="panel" data-panel="sources" role="tabpanel" hidden>
+        <p class="muted small">Tick who you want to hear from. Quotes are pulled from <a href="https://en.wikiquote.org" target="_blank" rel="noopener">Wikiquote</a> automatically and refreshed every week.</p>
+        <div id="source-groups"></div>
 
-      <h3>Translation</h3>
-      <p class="muted small">Show the day's thought in another language as well. The English original is always kept.</p>
-      <div class="row">
-        <select id="lang" aria-label="Translation language"></select>
-      </div>
-      <p class="muted small" id="lang-hint"></p>
+        <h3>Add any Wikiquote page</h3>
+        <div class="row">
+          <input type="text" id="custom-title" placeholder="e.g. Marcus Aurelius, Walden, Stoicism" aria-label="Wikiquote page title">
+          <button type="button" class="btn" id="add-custom">Add</button>
+        </div>
+        <p class="muted small" id="custom-hint"></p>
 
-      <h3>My own lines</h3>
-      <p class="muted small">One thought per line. These stay in this browser only.</p>
-      <textarea id="own-lines" rows="5" placeholder="What stands in the way becomes the way."></textarea>
+        <h3>My own lines</h3>
+        <p class="muted small">One thought per line. These stay in this browser only.</p>
+        <textarea id="own-lines" rows="5" placeholder="What stands in the way becomes the way."></textarea>
 
-      <h3>Data</h3>
-      <div class="row wrap">
-        <button type="button" class="btn" id="refresh-all">Refresh from Wikiquote now</button>
-        <button type="button" class="btn" id="reset-seen">Forget what I've seen</button>
-        <button type="button" class="btn danger" id="reset-all">Reset everything</button>
-      </div>
-      <p class="muted small" id="data-status"></p>
+        <h3>Data</h3>
+        <div class="row wrap">
+          <button type="button" class="btn" id="refresh-all">Refresh from Wikiquote now</button>
+          <button type="button" class="btn" id="reset-seen">Forget what I've seen</button>
+          <button type="button" class="btn danger" id="reset-all">Reset everything</button>
+        </div>
+        <p class="muted small" id="data-status"></p>
+      </section>
+
+      <section class="panel" data-panel="translation" role="tabpanel" hidden>
+        <p class="muted small">Show the day's thought in another language as well. The English original is always kept.</p>
+        <div class="flag-grid" id="flag-grid" role="radiogroup" aria-label="Translation language"></div>
+        <p class="muted small" id="lang-hint"></p>
+      </section>
     </form>
   </dialog>
 
