@@ -1,4 +1,3 @@
-| `docs/ARCHITECTURE.md` | Requirements and architecture document |
 # Aphorisms
 
 One thought a day — a sentence, aphorism or short paragraph — drawn from the
@@ -61,6 +60,7 @@ node scripts/fetch.mjs seneca     # one source id (see src/sources.js)
 | `scripts/fetch.mjs` | Snapshot builder used by the Action |
 | `data/` | Generated snapshot (committed by the Action) |
 | `sw.js`, `manifest.webmanifest` | PWA bits |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Requirements and architecture document |
 
 ## Licence
 
