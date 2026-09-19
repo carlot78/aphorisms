@@ -1,3 +1,4 @@
+| `docs/ARCHITECTURE.md` | Requirements and architecture document |
 # Aphorisms
 
 One thought a day — a sentence, aphorism or short paragraph — drawn from the
