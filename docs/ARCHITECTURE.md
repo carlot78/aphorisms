@@ -133,7 +133,7 @@ Node 22 script (no dependencies). Imports `SOURCES` and `fetchSource`, iterates 
 Scheduled GitHub Action that runs the fetch script and commits the snapshot (see 3.9).
 
 #### `sw.js`
-Service worker: precaches the `SHELL` list under cache `VERSION = 'aphorisms-v2'`, deletes older caches on activate, serves same-origin GET requests stale-while-revalidate (see 3.8).
+Service worker: precaches the `SHELL` list under cache `VERSION = 'aphorisms-v3'`, deletes older caches on activate, serves same-origin GET requests stale-while-revalidate (see 3.8).
 
 #### `manifest.webmanifest`
 PWA manifest: `name`/`short_name` "Aphorisms", `start_url` and `scope` `./`, `display: standalone`, background/theme `#f6f1e7`, single SVG icon `any maskable`.
@@ -255,7 +255,7 @@ All keys live in `localStorage` with the `aph.` prefix, JSON-encoded, accessed o
 ### 3.8 Offline / PWA
 
 - `app.js` registers `sw.js` when `serviceWorker` exists and the protocol is not `file:`.
-- **Install**: `caches.open('aphorisms-v2').addAll(SHELL)` where `SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'manifest.webmanifest', 'icon.svg']`, then `skipWaiting()`.
+- **Install**: `caches.open('aphorisms-v3').addAll(SHELL)` where `SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'manifest.webmanifest', 'icon.svg']`, then `skipWaiting()`.
 - **Activate**: every cache whose name is not `VERSION` is deleted, then `clients.claim()`. Bumping `VERSION` is how a shell update is rolled out.
 - **Fetch**: only same-origin `GET` requests are handled (`url.origin !== location.origin` → return, so Wikiquote, MyMemory and Google calls are never cached and never intercepted). Strategy is stale-while-revalidate: respond with the cached copy if present, otherwise the network response; in both cases the network response, when `ok`, is written back to the cache. This also covers `data/sources/*.json`, so a snapshot fetched once is available offline. If the network fails and nothing is cached, the promise resolves to `undefined` and the request errors normally.
 - Quote data itself is not in the SW cache; it lives in `localStorage`, which is why the shell alone suffices for offline use.

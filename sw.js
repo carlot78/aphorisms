@@ -2,7 +2,7 @@
 // localStorage, so only the static files need caching. Wikiquote API calls
 // are never cached here.
 
-const VERSION = 'aphorisms-v2';
+const VERSION = 'aphorisms-v3';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', (event) => {
