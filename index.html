@@ -68,6 +68,7 @@
         <button type="button" role="tab" data-tab="topics" aria-selected="true">Topics</button>
         <button type="button" role="tab" data-tab="sources" aria-selected="false">Sources</button>
         <button type="button" role="tab" data-tab="translation" aria-selected="false">Translation</button>
+        <button type="button" role="tab" data-tab="notifications" aria-selected="false">Notifications</button>
       </nav>
 
       <section class="panel" data-panel="topics" role="tabpanel">
@@ -103,6 +104,30 @@
         <p class="muted small">Show the day's thought in another language as well. The English original is always kept.</p>
         <div class="flag-grid" id="flag-grid" role="radiogroup" aria-label="Translation language"></div>
         <p class="muted small" id="lang-hint"></p>
+      </section>
+      <section class="panel" data-panel="notifications" role="tabpanel" hidden>
+        <p class="muted small">Get the day's thought as a notification on this device — even when the app is closed.</p>
+        <p class="notice" id="push-unsupported" hidden></p>
+        <div id="push-controls" hidden>
+          <div class="row wrap">
+            <label class="field">Send at <select id="push-hour" aria-label="Hour"></select></label>
+            <button type="button" class="btn primary" id="push-enable">Enable on this device</button>
+            <button type="button" class="btn" id="push-test" hidden>Test notification</button>
+            <button type="button" class="btn danger" id="push-disable" hidden>Disable</button>
+          </div>
+          <p class="muted small" id="push-status"></p>
+          <div id="push-setup" hidden>
+            <h3>One-time setup</h3>
+            <ol class="steps small">
+              <li>Copy the configuration below.</li>
+              <li>Open the repository's <a href="https://github.com/carlot78/aphorisms/settings/secrets/actions/new" target="_blank" rel="noopener">new secret</a> page, name it <code>PUSH_CONFIG</code>, paste, save.</li>
+              <li>Optional: run the <a href="https://github.com/carlot78/aphorisms/actions/workflows/daily-push.yml" target="_blank" rel="noopener">Daily push</a> workflow once to receive a test push right away.</li>
+            </ol>
+            <textarea id="push-config" rows="4" readonly spellcheck="false" aria-label="Push configuration"></textarea>
+            <div class="row"><button type="button" class="btn" id="push-copy">Copy configuration</button></div>
+            <p class="muted small">The configuration bakes in your sources, language and hour — copy it again after changing them. For a second device, add its subscription to the <code>subscriptions</code> list of the existing secret.</p>
+          </div>
+        </div>
       </section>
     </form>
   </dialog>

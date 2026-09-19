@@ -1,0 +1,42 @@
+name: Daily push
+
+# Sends the day's thought as a Web Push notification at the hour configured
+# in the PUSH_CONFIG secret (pasted from the app's Notifications tab). Runs
+# hourly and exits early unless it is that hour in the configured time zone.
+
+on:
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Send now, ignoring the configured hour'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-push
+  cancel-in-progress: false
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install web-push
+        run: npm install --no-save --no-package-lock --no-audit --no-fund web-push@3.6.7
+
+      - name: Send
+        env:
+          PUSH_CONFIG: ${{ secrets.PUSH_CONFIG }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force && 'true' || 'false' }}
+        run: node scripts/push.mjs

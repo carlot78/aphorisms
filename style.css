@@ -264,3 +264,15 @@ textarea { font-family: var(--serif); resize: vertical; }
   .people, .flag-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .person .blurb { white-space: normal; }
 }
+
+/* Settings: notifications */
+.notice { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 12px; padding: 0.7rem 0.9rem; font-size: 0.9rem; }
+.field { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
+.field select {
+  font: inherit; color: inherit; background: var(--bg);
+  border: 1px solid var(--line); border-radius: 999px; padding: 0.4rem 0.75rem;
+}
+.steps { padding-left: 1.2rem; margin: 0.25rem 0 0.75rem; color: var(--ink-soft); }
+.steps li { margin: 0.25rem 0; }
+code { font-size: 0.85em; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3em; }
+#push-config { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.72rem; white-space: pre; overflow: auto; }

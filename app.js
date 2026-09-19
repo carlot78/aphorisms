@@ -2,6 +2,7 @@ import { SOURCES, TOPICS, CUSTOM_TOPIC, STARTER_IDS, customSource } from './src/
 import { fetchSource, hash } from './src/wikiquote.js';
 import { translate, LANGUAGES, languageName } from './src/translate.js';
 import { flagSvg } from './src/flags.js';
+import { pushSupported, isIos, isStandalone, currentSubscription, subscribe, unsubscribe, buildConfig, showLocalNotification, readLatestPush } from './src/push.js';
 
 const FRESH_MS = 7 * 24 * 3600 * 1000; // re-fetch a source after a week
 const SNAPSHOT_RETRY_MS = 24 * 3600 * 1000;
@@ -22,6 +23,9 @@ const el = {
   refreshAll: $('refresh-all'), resetSeen: $('reset-seen'), resetAll: $('reset-all'), dataStatus: $('data-status'),
   translation: $('quote-translation'), langHint: $('lang-hint'), flagGrid: $('flag-grid'), topicGrid: $('topic-grid'),
   tabs: [...document.querySelectorAll('.tabs [role=tab]')], panels: [...document.querySelectorAll('.panel[data-panel]')],
+  pushUnsupported: $('push-unsupported'), pushControls: $('push-controls'), pushHour: $('push-hour'), pushEnable: $('push-enable'),
+  pushTest: $('push-test'), pushDisable: $('push-disable'), pushStatus: $('push-status'), pushSetup: $('push-setup'),
+  pushConfig: $('push-config'), pushCopy: $('push-copy'),
 };
 
 // ---------- storage ----------
@@ -63,6 +67,7 @@ let settings = store.get('settings', null) || {
   salt: Math.random().toString(36).slice(2),
 };
 settings.lang ||= ''; // translation language, '' = none (added after first release)
+settings.pushHour ??= 8; // local hour for the daily push notification
 const saveSettings = () => store.set('settings', settings);
 
 /** All selectable sources: catalog + user-added Wikiquote pages. */
@@ -341,7 +346,7 @@ async function renderTranslation(quote) {
 // ---------- settings UI: topics, sources, translation ----------
 
 const THUMB_TTL = 30 * 24 * 3600 * 1000;
-const TABS = ['topics', 'sources', 'translation'];
+const TABS = ['topics', 'sources', 'translation', 'notifications'];
 
 /**
  * Portrait thumbnails come from Wikipedia's `pageimages` API (the Wikiquote
@@ -566,12 +571,135 @@ async function openSettings(tab) {
   renderTopics();
   renderSources();
   renderLanguageGrid();
+  renderNotifications();
   renderDataStatus();
   el.ownLines.value = settings.ownLines;
   showTab(tab || store.get('ui.tab', 'topics'));
   el.dialog.showModal();
   // Portraits load in the background; re-render the list once they arrive.
   if ((await ensureThumbs(allSources())) && el.dialog.open) renderSources();
+}
+
+// ---------- notifications (Web Push) ----------
+
+const timeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+
+async function renderNotifications() {
+  const supported = pushSupported() && location.protocol !== 'file:';
+  el.pushUnsupported.hidden = supported;
+  el.pushControls.hidden = !supported;
+  if (!supported) {
+    el.pushUnsupported.textContent = isIos() && !isStandalone()
+      ? 'On iPhone and iPad, notifications only work for installed apps: tap Share → "Add to Home Screen", then open Aphorisms from there.'
+      : 'This browser does not support push notifications.';
+    return;
+  }
+  if (!el.pushHour.options.length) {
+    for (let h = 0; h < 24; h++) el.pushHour.append(new Option(`${String(h).padStart(2, '0')}:00`, h));
+  }
+  el.pushHour.value = settings.pushHour;
+
+  let sub = null;
+  let swError = '';
+  try {
+    sub = await currentSubscription();
+  } catch (err) {
+    swError = err.message;
+  }
+  const permission = Notification.permission;
+  el.pushEnable.hidden = !!sub;
+  el.pushTest.hidden = !sub;
+  el.pushDisable.hidden = !sub;
+  el.pushSetup.hidden = !sub;
+  if (sub) {
+    el.pushStatus.textContent = permission === 'granted'
+      ? `Enabled on this device — one thought a day at ${String(settings.pushHour).padStart(2, '0')}:00 (${timeZone()}).`
+      : 'Subscribed, but notifications are blocked in the browser settings for this site.';
+    el.pushConfig.value = JSON.stringify(buildConfig({ subscription: sub, sources: settings.enabled, lang: settings.lang, hour: settings.pushHour, timeZone: timeZone() }));
+  } else {
+    el.pushStatus.textContent = swError
+      ? `Cannot enable here: ${swError}`
+      : permission === 'denied'
+        ? 'Notifications are blocked for this site. Allow them in the browser settings, then try again.'
+        : 'Not enabled on this device.';
+    el.pushConfig.value = '';
+  }
+}
+
+/**
+ * If the service worker received today's push, show that exact quote so the
+ * notification and the app agree. Done once per day so "Another" still works.
+ */
+async function adoptPushedQuote() {
+  const p = await readLatestPush();
+  const date = todayKey();
+  if (!p?.quote || p.date !== date || store.get('pushAdopted', '') === date) return false;
+  store.set('pushAdopted', date);
+  const quote = { ...p.quote };
+  if (p.translation && p.lang) rememberTranslation(quote, p.lang, p.translation);
+  current = quote;
+  markSeen(quote);
+  store.set('today', { date, quote });
+  recordHistory(date, quote);
+  renderQuote(quote);
+  renderLists();
+  return true;
+}
+
+function bindNotifications() {
+  el.pushHour.addEventListener('change', () => {
+    settings.pushHour = Number(el.pushHour.value);
+    saveSettings();
+    renderNotifications();
+  });
+
+  el.pushEnable.addEventListener('click', async () => {
+    el.pushEnable.disabled = true;
+    el.pushStatus.textContent = 'Asking for permission…';
+    try {
+      await subscribe();
+      await renderNotifications();
+      showTab('notifications');
+    } catch (err) {
+      el.pushStatus.textContent = `Could not enable: ${err.message}`;
+    } finally {
+      el.pushEnable.disabled = false;
+    }
+  });
+
+  el.pushDisable.addEventListener('click', async () => {
+    try {
+      await unsubscribe();
+    } catch (err) {
+      console.warn(err);
+    }
+    renderNotifications();
+  });
+
+  el.pushTest.addEventListener('click', async () => {
+    const who = current ? findSource(current.sourceId)?.name || current.source : '';
+    try {
+      await showLocalNotification('Thought for today', {
+        body: current ? `“${current.text}” — ${who}` : 'This is how the daily thought will look.',
+        icon: 'icon.svg',
+        tag: 'daily-thought-test',
+      });
+      el.pushStatus.textContent = 'Test notification shown (this one came from the app itself, not from the server).';
+    } catch (err) {
+      el.pushStatus.textContent = `Could not show a notification: ${err.message}`;
+    }
+  });
+
+  el.pushCopy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(el.pushConfig.value);
+      el.pushCopy.textContent = 'Copied ✓';
+      setTimeout(() => { el.pushCopy.textContent = 'Copy configuration'; }, 1500);
+    } catch {
+      el.pushConfig.select();
+      el.pushStatus.textContent = 'Copy failed — select the text and copy it manually.';
+    }
+  });
 }
 
 const isFav = (q) => store.get('favs', []).some((f) => f.id === q.id);
@@ -648,6 +776,7 @@ function bind() {
   el.openSources.addEventListener('click', () => openSettings());
   el.emptyAction.addEventListener('click', () => openSettings('topics'));
   for (const tab of el.tabs) tab.addEventListener('click', () => showTab(tab.dataset.tab));
+  bindNotifications();
 
   el.dialog.addEventListener('close', async () => {
     settings.ownLines = el.ownLines.value;
@@ -737,10 +866,12 @@ function bind() {
 
   // New day while the tab stays open (e.g. installed on a phone).
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && store.get('today', {}).date !== todayKey()) {
+    if (document.visibilityState !== 'visible') return;
+    if (store.get('today', {}).date !== todayKey()) {
       el.date.textContent = formatDate();
       showToday();
     }
+    adoptPushedQuote();
   });
 }
 
@@ -751,14 +882,14 @@ const formatDate = () => new Date().toLocaleDateString(undefined, { weekday: 'lo
 async function init() {
   el.date.textContent = formatDate();
   bind();
-  showToday(); // instant if anything is cached
-  renderLists();
-  await ensureSources({ onLoaded: () => { if (!current) showToday(); } });
-  if (!current) showToday();
-
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch((err) => console.warn('SW registration failed', err));
   }
+  showToday(); // instant if anything is cached
+  renderLists();
+  await adoptPushedQuote(); // a push received today wins over the local pick
+  await ensureSources({ onLoaded: () => { if (!current) showToday(); } });
+  if (!current) showToday();
 }
 
 init();

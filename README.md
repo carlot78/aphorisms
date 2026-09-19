@@ -26,6 +26,8 @@ maintaining a quote list.
   (24 languages), always alongside the English original. Uses the browser's
   built-in on-device translator when available, otherwise the free MyMemory
   API with Google Translate as a fallback. Translations are cached locally.
+- **Push notifications** — optional daily notification with the day's thought
+  (and its translation), sent by a GitHub Action; see below.
 - **Installable & offline** — it's a PWA. On a phone, "Add to Home Screen";
   the shell and your cached quotes work without a connection.
 - **Private** — everything (selection, history, favourites, own lines) lives
@@ -41,6 +43,25 @@ python -m http.server 8080
 ```
 
 then open http://localhost:8080.
+
+## Push notifications (optional)
+
+There is no server, so the daily push is sent by the repository's own
+[`daily-push.yml`](.github/workflows/daily-push.yml) workflow. One-time setup:
+
+1. Generate a VAPID key pair (the public half is in `src/push-config.js`) and
+   store the private half as the repository secret `VAPID_PRIVATE_KEY`.
+2. In the app, open Settings → **Notifications**, pick the hour, tap
+   **Enable on this device** and allow notifications. (iPhone/iPad: add the app
+   to the Home Screen first and open it from there.)
+3. Copy the configuration shown and save it as the repository secret
+   `PUSH_CONFIG`. It contains the device's push subscription plus your sources,
+   language and hour — copy it again after changing those.
+
+The workflow runs hourly, and at your hour picks a quote from your sources in
+the snapshot, translates it if you chose a language, and pushes it. Opening the
+app from the notification shows that same quote. Run the workflow manually
+from the Actions tab to get a test push immediately.
 
 ## Refresh the snapshot manually
 
@@ -58,6 +79,7 @@ node scripts/fetch.mjs seneca     # one source id (see src/sources.js)
 | `src/sources.js` | Source catalog |
 | `src/translate.js` | Translation providers (on-device → MyMemory → Google) |
 | `scripts/fetch.mjs` | Snapshot builder used by the Action |
+| `scripts/push.mjs`, `src/push.js`, `src/push-config.js` | Web Push: sender (Action), browser subscription, VAPID public key |
 | `data/` | Generated snapshot (committed by the Action) |
 | `sw.js`, `manifest.webmanifest` | PWA bits |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Requirements and architecture document |
