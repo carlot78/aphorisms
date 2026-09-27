@@ -7,10 +7,32 @@ const URL_RE = /https?:\/\/[^\s<>"“”]+/g;
 const stripQuotes = (s) => s.trim().replace(/^[“"'«„‘]+/, '').replace(/[”"'»“’]+$/, '').trim();
 
 /**
+ * Read the highlighted text back out of a Chrome "link to highlight"
+ * (`#:~:text=[prefix-,]start[,end][,-suffix]`). Returns '' if there is none,
+ * and `partial: true` when only the start and end of a long selection are in
+ * the link (Chrome elides the middle).
+ */
+export function textFromFragment(url) {
+  const i = String(url || '').indexOf(':~:');
+  if (i < 0) return { text: '', partial: false };
+  const directive = url.slice(i + 3).split('&').find((d) => d.startsWith('text='));
+  if (!directive) return { text: '', partial: false };
+  const parts = directive.slice(5).split(',').filter((p) => p && !p.endsWith('-') && !p.startsWith('-'));
+  const dec = (p) => { try { return decodeURIComponent(p); } catch { return p; } };
+  if (parts.length === 1) return { text: dec(parts[0]).trim(), partial: false };
+  if (parts.length === 2) return { text: `${dec(parts[0]).trim()} … ${dec(parts[1]).trim()}`, partial: true };
+  return { text: '', partial: false };
+}
+
+/**
  * Normalise what a share sheet hands us. Apps differ a lot: Chrome's
- * "share highlight" sends `"text"\n<url#:~:text=…>`, Kindle sends the
- * highlight followed by "Book by Author" and a link, some apps put the page
- * title in `title`, others repeat the text there.
+ * selection toolbar sends `"text"\n<url#:~:text=…>`, Chrome's page menu
+ * sends only title + URL (no selection), Kindle sends the highlight followed
+ * by "Book by Author" and a link.
+ *
+ * Returns `{ text, attribution, url, kind }` where kind is 'selection',
+ * 'fragment' (recovered from a highlight link), 'partial' (fragment with the
+ * middle missing) or 'page' (nothing selected — only the page was shared).
  */
 export function parseShared({ title = '', text = '', url = '' } = {}) {
   let body = String(text || '').replace(/\r\n?/g, '\n');
@@ -28,14 +50,21 @@ export function parseShared({ title = '', text = '', url = '' } = {}) {
     }
   }
   body = stripQuotes(paras.join('\n\n'));
-
   title = String(title || '').trim();
-  if (!body && title) { body = stripQuotes(title); title = ''; }
+
+  let kind = 'selection';
+  // Only the page was shared: the "text" is empty or just the page title.
+  if (!body || (title && stripQuotes(title) === body)) {
+    const frag = textFromFragment(url);
+    body = frag.text;
+    kind = frag.text ? (frag.partial ? 'partial' : 'fragment') : 'page';
+  }
+
   if (!attribution && title && title !== body) attribution = title;
   if (!attribution && url) {
     try { attribution = new URL(url).hostname.replace(/^www\./, ''); } catch { /* not a URL */ }
   }
-  return { text: body, attribution, url: url || '' };
+  return { text: body, attribution, url: url || '', kind };
 }
 
 /** Parse a Kindle "My Clippings.txt" into highlights (bookmarks skipped). */

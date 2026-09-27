@@ -29,7 +29,7 @@ const el = {
   pushConfig: $('push-config'), pushCopy: $('push-copy'),
   colAdd: $('col-add'), colFile: $('col-file'), colStatus: $('col-status'), colList: $('col-list'), colCount: $('col-count'),
   colBookmarklet: $('col-bookmarklet'), colShortcut: $('col-shortcut'),
-  shareDialog: $('share-dialog'), shareText: $('share-text'), shareFrom: $('share-from'), shareUrl: $('share-url'), shareHint: $('share-hint'),
+  sharePaste: $('share-paste'), shareDialog: $('share-dialog'), shareText: $('share-text'), shareFrom: $('share-from'), shareUrl: $('share-url'), shareHint: $('share-hint'),
 };
 
 // ---------- storage ----------
@@ -769,12 +769,19 @@ function renderCollection() {
   el.colShortcut.textContent = `${APP_URL}?share&text=`;
 }
 
+const SHARE_HINTS = {
+  selection: '',
+  fragment: 'Taken from the highlight in the shared link.',
+  partial: 'The link only holds the start and end of your selection — paste the full text to replace the “…”.',
+  page: 'Only the page link was shared, not a selection. In Chrome, select the text and tap Share in the pop-up next to it — or copy the text and tap Paste.',
+};
+
 function openShareDialog(shared = {}) {
   const p = parseShared(shared);
   el.shareText.value = p.text;
   el.shareFrom.value = p.attribution;
   el.shareUrl.value = p.url;
-  el.shareHint.textContent = p.url ? `Link: ${p.url}` : '';
+  el.shareHint.textContent = SHARE_HINTS[p.kind] || '';
   el.shareDialog.returnValue = '';
   el.shareDialog.showModal();
   el.shareText.focus();
@@ -801,6 +808,17 @@ function showQuoteNow(quote) {
 
 function bindCollection() {
   el.colAdd.addEventListener('click', () => openShareDialog());
+
+  el.sharePaste.addEventListener('click', async () => {
+    try {
+      const clip = (await navigator.clipboard.readText()).trim();
+      if (!clip) throw new Error('empty');
+      el.shareText.value = parseShared({ text: clip }).text || clip;
+      el.shareHint.textContent = '';
+    } catch {
+      el.shareHint.textContent = 'Could not read the clipboard — long-press the box and choose Paste.';
+    }
+  });
 
   el.shareDialog.addEventListener('close', () => {
     const action = el.shareDialog.returnValue;
