@@ -276,3 +276,20 @@ textarea { font-family: var(--serif); resize: vertical; }
 .steps li { margin: 0.25rem 0; }
 code { font-size: 0.85em; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3em; }
 #push-config { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.72rem; white-space: pre; overflow: auto; }
+
+/* Collection + share dialog */
+.tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs [role="tab"] { white-space: nowrap; flex: none; }
+.stack { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.85rem; color: var(--ink-soft); margin-top: 0.9rem; }
+.stack textarea, .stack input { color: var(--ink); font-size: 1rem; }
+#share-text { font-family: var(--serif); }
+#share-form .row { margin-top: 1rem; }
+label.btn { display: inline-flex; align-items: center; }
+.bookmarklet {
+  display: inline-block; padding: 0.1rem 0.6rem; border-radius: 999px; text-decoration: none;
+  background: var(--accent); color: var(--accent-ink); font-weight: 600; cursor: grab;
+}
+.steps { list-style: none; padding-left: 0; }
+.steps li { margin: 0.5rem 0; }
+#col-shortcut { word-break: break-all; }

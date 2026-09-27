@@ -1,4 +1,4 @@
-Service worker: precaches the `SHELL` list under cache `VERSION = 'aphorisms-v5'`, deletes older caches on activate (except the `aph-push` cache), serves same-origin GET requests stale-while-revalidate (see 3.8). Web Push: the `push` handler parses the JSON payload, stores it at `aph-push`/`push/latest` and calls `showNotification` (tag `daily-thought`, so a new day replaces the old one); `notificationclick` focuses an open window or opens one; `pushsubscriptionchange` leaves a marker in the cache.- **Push requires a one-time manual step.** With no server, the push subscription has to be pasted into a repository secret by the owner; each additional device means editing that secret. Delivery timing depends on GitHub's hourly cron (may run a few minutes late). iOS delivers push only to apps added to the Home Screen.# Aphorisms — Requirements & Architecture
+Service worker: precaches the `SHELL` list under cache `VERSION = 'aphorisms-v6'`, deletes older caches on activate (except the `aph-push` cache), serves same-origin GET requests stale-while-revalidate (see 3.8). Web Push: the `push` handler parses the JSON payload, stores it at `aph-push`/`push/latest` and calls `showNotification` (tag `daily-thought`, so a new day replaces the old one); `notificationclick` focuses an open window or opens one; `pushsubscriptionchange` leaves a marker in the cache.- **Push requires a one-time manual step.** With no server, the push subscription has to be pasted into a repository secret by the owner; each additional device means editing that secret. Delivery timing depends on GitHub's hourly cron (may run a few minutes late). iOS delivers push only to apps added to the Home Screen.# Aphorisms — Requirements & Architecture
 
 ## 1. Overview
 
@@ -35,6 +35,7 @@ The three original owner requirements are:
 | FR-16 | The quote card links the source name to the Wikiquote page URL and shows section path and citation (`section · cite`). | R2 (attribution) | `renderQuote` |
 | FR-17 | Progress and error feedback via a live-region status line (`Fetching X… (n/m)`, `Couldn't load: …`, `Copied.`, `Storage is full — …`). | implemented behaviour | `setStatus` |
 | FR-18 | Optional daily **push notification** with the day's thought (plus translation). The browser subscribes via Web Push (VAPID) in Settings → *Notifications* and shows a configuration blob the owner stores as the `PUSH_CONFIG` repository secret; the `daily-push.yml` workflow runs hourly and, at the configured local hour, picks a quote from the configured sources in the snapshot (same bucket-per-source rule, seeded by the date), translates it, and sends it. The service worker shows the notification and stores the payload in the `aph-push` cache; on the next open the app adopts that quote for the day (once per day, so "Another" still works) and tapping the notification focuses/opens the app. | R1 ("present daily"), R3 | `src/push.js`, `sw.js` (`push`, `notificationclick`), `scripts/push.mjs`, `renderNotifications`, `adoptPushedQuote` |
+| FR-19 | **Send text from other apps** into "My collection", which joins the daily rotation as one extra source. Entry points: the Web Share Target declared in `manifest.webmanifest` (`GET ./?share&title&text&url`; Android share sheet from Chrome, Kindle, PDF readers… once installed), a desktop bookmarklet and an iOS Shortcut that open the same URL, "Add a passage" (paste), and a Kindle `My Clippings.txt` import (bookmarks and edited-duplicate highlights skipped). A confirmation sheet shows the parsed passage and attribution for editing, with *Save* or *Save & show now*. | R1 | `src/collection.js` (`parseShared`, `parseClippings`, `bookmarklet`), `consumeShareParams`, `openShareDialog`, `addToCollection`, `renderCollection` |
 
 ### 2.2 Non-functional requirements
 
@@ -55,6 +56,7 @@ The three original owner requirements are:
 
 - **No cross-device sync.** State is per browser profile; there is no export/import.
 - **Push needs a one-time manual step.** With no server, the push subscription has to be pasted into a repository secret by the owner; each additional device means editing that secret. Delivery timing depends on GitHub's hourly cron (can run a few minutes late). iOS delivers push only to apps added to the Home Screen.
+- **Sharing into the app** relies on the Web Share Target API: Android (Chrome/Edge, installed app) and installed PWAs on Windows. iOS has no share target for web apps — use the Shortcut; desktop browsers do not run bookmarklets inside their built-in PDF viewer. The collection lives only in this browser and is not used by the push workflow, which only sees the snapshot.
 - **Wikiquote coverage of modern, copyrighted authors is thin.** Catalog entries such as James Clear or Brené Brown may yield few quotes; the equal-chance picking keeps them from being drowned out but cannot create content.
 - **MyMemory quota.** Anonymous use is limited (~5000 chars/day per the comment in `src/translate.js`); once `quotaFinished` is returned the chain falls through to Google.
 - **Google Translate endpoint is unofficial.** `translate.googleapis.com/translate_a/single?client=gtx` is undocumented and may break or be blocked without notice.
@@ -141,9 +143,10 @@ Scheduled GitHub Action that runs the fetch script and commits the snapshot (see
 Sender (Node, run by `.github/workflows/daily-push.yml`, needs the `web-push` npm package installed at run time): reads `PUSH_CONFIG` and `VAPID_PRIVATE_KEY` from the environment, computes the local hour/date in the configured `timeZone` with `Intl.DateTimeFormat`, exits unless it is the configured hour (or `FORCE=true`), loads `data/sources/<id>.json` for the configured sources, picks with `mulberry32(hash(day + '|push'))`, translates via `src/translate.js`, and sends `{ date, title, body, quote, translation, lang, url }` to each subscription (404/410 logged as expired). Browser side: `pushSupported`, `isIos`/`isStandalone`, `subscribe` (permission + `pushManager.subscribe` with the VAPID public key from `src/push-config.js`), `unsubscribe`, `buildConfig`, `showLocalNotification`, `readLatestPush`; a 4-second guard around `serviceWorker.ready` reports an unavailable worker instead of hanging.
 
 
+| `aph.collection` | `Quote[]` with `sourceId: "collection"`, `source` = attribution, optional `url`, `added`; newest first | Uncapped; removable in Settings → Collection |
 | `aph.pushAdopted` | `"YYYY-MM-DD"` — the day whose pushed quote has already been adopted | — |
 | Cache `aph-push` → `push/latest` | Last push payload (Cache API, written by the service worker, read by the app) | Overwritten by each push |
-Service worker: precaches the `SHELL` list under cache `VERSION = 'aphorisms-v5'`, deletes older caches on activate, serves same-origin GET requests stale-while-revalidate (see 3.8).
+Service worker: precaches the `SHELL` list under cache `VERSION = 'aphorisms-v6'`, deletes older caches on activate, serves same-origin GET requests stale-while-revalidate (see 3.8).
 
 #### `manifest.webmanifest`
 PWA manifest: `name`/`short_name` "Aphorisms", `start_url` and `scope` `./`, `display: standalone`, background/theme `#f6f1e7`, single SVG icon `any maskable`.
@@ -267,7 +270,7 @@ All keys live in `localStorage` with the `aph.` prefix, JSON-encoded, accessed o
 ### 3.8 Offline / PWA
 
 - `app.js` registers `sw.js` when `serviceWorker` exists and the protocol is not `file:`.
-- **Install**: `caches.open('aphorisms-v5').addAll(SHELL)` where `SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'src/flags.js', 'src/push.js', 'src/push-config.js', 'manifest.webmanifest', 'icon.svg']`, then `skipWaiting()`.
+- **Install**: `caches.open('aphorisms-v6').addAll(SHELL)` where `SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'src/flags.js', 'src/collection.js', 'src/push.js', 'src/push-config.js', 'manifest.webmanifest', 'icon.svg']`, then `skipWaiting()`.
 - **Activate**: every cache whose name is not `VERSION` is deleted, then `clients.claim()`. Bumping `VERSION` is how a shell update is rolled out.
 - **Fetch**: only same-origin `GET` requests are handled (`url.origin !== location.origin` → return, so Wikiquote, MyMemory and Google calls are never cached and never intercepted). Strategy is stale-while-revalidate: respond with the cached copy if present, otherwise the network response; in both cases the network response, when `ok`, is written back to the cache. This also covers `data/sources/*.json`, so a snapshot fetched once is available offline. If the network fails and nothing is cached, the promise resolves to `undefined` and the request errors normally.
 - Quote data itself is not in the SW cache; it lives in `localStorage`, which is why the shell alone suffices for offline use.
@@ -334,6 +337,6 @@ python -m http.server 8080        # serve locally (ES modules need HTTP, not fil
 
 **Add a translation provider.** Implement `async function viaX(text, lang)` in `src/translate.js` returning the translated string or throwing; use `timeout(ms)` / `withTimeout` for network or promise guards and `chunk(text, max)` if the API has a length limit. Insert it at the desired position in `PROVIDERS`. `translate` already handles fallthrough, the "unchanged output" check and error aggregation; `app.js` needs no change. If the provider is a cross-origin API, no service-worker change is needed either (non-same-origin requests are not intercepted).
 
-**Ship a shell update.** Bump `VERSION` in `sw.js` (e.g. `aphorisms-v5`) and, if new static files are added, list them in `SHELL`.
+**Ship a shell update.** Bump `VERSION` in `sw.js` (e.g. `aphorisms-v6`) and, if new static files are added, list them in `SHELL`.
 
 **Add a new persistent setting.** Extend the `settings` object in `app.js` with a default assignment after `store.get('settings', …)` (as done for `settings.lang ||= ''`) so existing installs are migrated on load, and call `saveSettings()` when it changes.

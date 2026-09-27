@@ -2,8 +2,8 @@
 // Quote data lives in localStorage, so only the static files need caching.
 // Wikiquote API calls are never cached here.
 
-const VERSION = 'aphorisms-v5';
-const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'src/flags.js', 'src/push.js', 'src/push-config.js', 'manifest.webmanifest', 'icon.svg'];
+const VERSION = 'aphorisms-v6';
+const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'src/flags.js', 'src/collection.js', 'src/push.js', 'src/push-config.js', 'manifest.webmanifest', 'icon.svg'];
 const PUSH_CACHE = 'aph-push'; // survives VERSION bumps: holds the last pushed quote
 const PUSH_LATEST = 'push/latest';
 
@@ -26,10 +26,11 @@ self.addEventListener('fetch', (event) => {
   // Stale-while-revalidate for everything same-origin (shell + data snapshots).
   event.respondWith(
     caches.open(VERSION).then(async (cache) => {
-      const cached = await cache.match(event.request);
+      // Navigations may carry ?share=… from the share target: serve the shell.
+      const cached = await cache.match(event.request, { ignoreSearch: event.request.mode === 'navigate' });
       const network = fetch(event.request)
         .then((res) => {
-          if (res.ok) cache.put(event.request, res.clone());
+          if (res.ok && !(event.request.mode === 'navigate' && url.search)) cache.put(event.request, res.clone());
           return res;
         })
         .catch(() => cached);

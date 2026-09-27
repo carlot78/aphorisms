@@ -1,4 +1,5 @@
 {
+  "id": "./",
   "name": "Aphorisms",
   "short_name": "Aphorisms",
   "description": "One thought a day from the personal-development sources you choose.",
@@ -9,5 +10,10 @@
   "theme_color": "#f6f1e7",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
-  ]
+  ],
+  "share_target": {
+    "action": "./?share",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
 }

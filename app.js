@@ -2,6 +2,7 @@ import { SOURCES, TOPICS, CUSTOM_TOPIC, STARTER_IDS, customSource } from './src/
 import { fetchSource, hash } from './src/wikiquote.js';
 import { translate, LANGUAGES, languageName } from './src/translate.js';
 import { flagSvg } from './src/flags.js';
+import { parseShared, parseClippings, bookmarklet } from './src/collection.js';
 import { pushSupported, isIos, isStandalone, currentSubscription, subscribe, unsubscribe, buildConfig, showLocalNotification, readLatestPush } from './src/push.js';
 
 const FRESH_MS = 7 * 24 * 3600 * 1000; // re-fetch a source after a week
@@ -26,6 +27,9 @@ const el = {
   pushUnsupported: $('push-unsupported'), pushControls: $('push-controls'), pushHour: $('push-hour'), pushEnable: $('push-enable'),
   pushTest: $('push-test'), pushDisable: $('push-disable'), pushStatus: $('push-status'), pushSetup: $('push-setup'),
   pushConfig: $('push-config'), pushCopy: $('push-copy'),
+  colAdd: $('col-add'), colFile: $('col-file'), colStatus: $('col-status'), colList: $('col-list'), colCount: $('col-count'),
+  colBookmarklet: $('col-bookmarklet'), colShortcut: $('col-shortcut'),
+  shareDialog: $('share-dialog'), shareText: $('share-text'), shareFrom: $('share-from'), shareUrl: $('share-url'), shareHint: $('share-hint'),
 };
 
 // ---------- storage ----------
@@ -202,6 +206,8 @@ function pool() {
   }
   const own = ownSource();
   if (own) buckets.push(own.quotes);
+  const col = collectionSource();
+  if (col) buckets.push(col.quotes); // the whole collection counts as one source
   return buckets;
 }
 
@@ -285,8 +291,9 @@ function renderQuote(quote) {
   const src = findSource(quote.sourceId);
   const cached = quote.sourceId === OWN_ID ? null : loadCached(quote.sourceId);
   el.source.textContent = src?.name || quote.source;
-  if (cached?.url) {
-    el.source.href = cached.url;
+  const href = quote.url || cached?.url;
+  if (href) {
+    el.source.href = href;
     el.source.removeAttribute('aria-disabled');
   } else {
     el.source.removeAttribute('href');
@@ -346,7 +353,7 @@ async function renderTranslation(quote) {
 // ---------- settings UI: topics, sources, translation ----------
 
 const THUMB_TTL = 30 * 24 * 3600 * 1000;
-const TABS = ['topics', 'sources', 'translation', 'notifications'];
+const TABS = ['topics', 'sources', 'translation', 'collection', 'notifications'];
 
 /**
  * Portrait thumbnails come from Wikipedia's `pageimages` API (the Wikiquote
@@ -572,6 +579,7 @@ async function openSettings(tab) {
   renderSources();
   renderLanguageGrid();
   renderNotifications();
+  renderCollection();
   renderDataStatus();
   el.ownLines.value = settings.ownLines;
   showTab(tab || store.get('ui.tab', 'topics'));
@@ -702,6 +710,128 @@ function bindNotifications() {
   });
 }
 
+// ---------- my collection (text shared in from other apps) ----------
+
+const COLLECTION_ID = 'collection';
+const APP_URL = new URL('./', location.href).href;
+
+const loadCollection = () => store.get('collection', []);
+
+function collectionSource() {
+  const items = loadCollection();
+  if (!items.length) return null;
+  return { id: COLLECTION_ID, title: 'My collection', quotes: items };
+}
+
+function collectionQuote({ text, attribution, url }) {
+  return {
+    id: hash('col|' + text.toLowerCase().replace(/\s+/g, ' ')),
+    text,
+    source: attribution || 'My collection',
+    section: '',
+    cite: attribution ? 'My collection' : '',
+    url: url || '',
+    sourceId: COLLECTION_ID,
+    added: Date.now(),
+  };
+}
+
+/** Add passages; returns how many were new. */
+function addToCollection(entries) {
+  const items = loadCollection();
+  const ids = new Set(items.map((q) => q.id));
+  let added = 0;
+  for (const e of entries) {
+    const text = (e.text || '').trim();
+    if (text.length < 3) continue;
+    const q = collectionQuote({ ...e, text });
+    if (ids.has(q.id)) continue;
+    ids.add(q.id);
+    items.unshift(q);
+    added++;
+  }
+  store.set('collection', items);
+  return added;
+}
+
+function renderCollection() {
+  const items = loadCollection();
+  el.colCount.textContent = items.length ? `(${items.length})` : '';
+  el.colList.replaceChildren(
+    ...items.map((q) =>
+      quoteItem(q, q.source, () => {
+        store.set('collection', loadCollection().filter((x) => x.id !== q.id));
+        renderCollection();
+      })
+    )
+  );
+  el.colBookmarklet.href = bookmarklet(APP_URL);
+  el.colShortcut.textContent = `${APP_URL}?share&text=`;
+}
+
+function openShareDialog(shared = {}) {
+  const p = parseShared(shared);
+  el.shareText.value = p.text;
+  el.shareFrom.value = p.attribution;
+  el.shareUrl.value = p.url;
+  el.shareHint.textContent = p.url ? `Link: ${p.url}` : '';
+  el.shareDialog.returnValue = '';
+  el.shareDialog.showModal();
+  el.shareText.focus();
+}
+
+/** Handle `?share&text=…&title=…&url=…` (share target, bookmarklet, Shortcut). */
+function consumeShareParams() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has('share') && !params.has('text')) return;
+  const shared = { title: params.get('title') || '', text: params.get('text') || '', url: params.get('url') || '' };
+  history.replaceState(null, '', location.pathname); // don't re-open on reload
+  openShareDialog(shared);
+}
+
+function showQuoteNow(quote) {
+  const date = todayKey();
+  current = quote;
+  markSeen(quote);
+  store.set('today', { date, quote });
+  recordHistory(date, quote);
+  renderQuote(quote);
+  renderLists();
+}
+
+function bindCollection() {
+  el.colAdd.addEventListener('click', () => openShareDialog());
+
+  el.shareDialog.addEventListener('close', () => {
+    const action = el.shareDialog.returnValue;
+    if (action !== 'save' && action !== 'show') return;
+    const entry = { text: el.shareText.value, attribution: el.shareFrom.value.trim(), url: el.shareUrl.value };
+    const added = addToCollection([entry]);
+    const quote = loadCollection().find((q) => q.id === collectionQuote({ ...entry, text: entry.text.trim() }).id);
+    if (action === 'show' && quote) showQuoteNow(quote);
+    setStatus(added ? 'Saved to your collection.' : 'Already in your collection.');
+    setTimeout(() => setStatus(''), 2000);
+    if (el.dialog.open) renderCollection();
+  });
+
+  el.colFile.addEventListener('change', async () => {
+    const file = el.colFile.files[0];
+    if (!file) return;
+    try {
+      const entries = parseClippings(await file.text());
+      const added = addToCollection(entries);
+      el.colStatus.textContent = entries.length
+        ? `Imported ${added} new highlight${added === 1 ? '' : 's'} (${entries.length - added} already there).`
+        : 'No highlights found — is this a Kindle "My Clippings.txt"?';
+      renderCollection();
+    } catch (err) {
+      el.colStatus.textContent = `Import failed: ${err.message}`;
+    } finally {
+      el.colFile.value = '';
+    }
+  });
+}
+
 const isFav = (q) => store.get('favs', []).some((f) => f.id === q.id);
 
 function renderFavButton() {
@@ -777,13 +907,14 @@ function bind() {
   el.emptyAction.addEventListener('click', () => openSettings('topics'));
   for (const tab of el.tabs) tab.addEventListener('click', () => showTab(tab.dataset.tab));
   bindNotifications();
+  bindCollection();
 
   el.dialog.addEventListener('close', async () => {
     settings.ownLines = el.ownLines.value;
     saveSettings();
     const { failed } = await ensureSources({ onLoaded: () => { if (!current) showToday(); } });
     // If today's pick came from a source that is now disabled, choose again.
-    if (!current || !(settings.enabled.includes(current.sourceId) || (current.sourceId === OWN_ID && ownSource()))) {
+    if (!current || !(settings.enabled.includes(current.sourceId) || (current.sourceId === OWN_ID && ownSource()) || (current.sourceId === COLLECTION_ID && loadCollection().some((q) => q.id === current.id)))) {
       showToday({ replace: true });
     }
     if (failed.length) renderSources();
@@ -886,6 +1017,7 @@ async function init() {
     navigator.serviceWorker.register('sw.js').catch((err) => console.warn('SW registration failed', err));
   }
   showToday(); // instant if anything is cached
+  consumeShareParams();
   renderLists();
   await adoptPushedQuote(); // a push received today wins over the local pick
   await ensureSources({ onLoaded: () => { if (!current) showToday(); } });

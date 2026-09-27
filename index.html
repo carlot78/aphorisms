@@ -68,6 +68,7 @@
         <button type="button" role="tab" data-tab="topics" aria-selected="true">Topics</button>
         <button type="button" role="tab" data-tab="sources" aria-selected="false">Sources</button>
         <button type="button" role="tab" data-tab="translation" aria-selected="false">Translation</button>
+        <button type="button" role="tab" data-tab="collection" aria-selected="false">Collection</button>
         <button type="button" role="tab" data-tab="notifications" aria-selected="false">Notifications</button>
       </nav>
 
@@ -105,6 +106,26 @@
         <div class="flag-grid" id="flag-grid" role="radiogroup" aria-label="Translation language"></div>
         <p class="muted small" id="lang-hint"></p>
       </section>
+      <section class="panel" data-panel="collection" role="tabpanel" hidden>
+        <p class="muted small">Passages you send in from other apps — a web page, a Kindle highlight, a PDF — join the daily rotation as <em>My collection</em>.</p>
+        <div class="row wrap">
+          <button type="button" class="btn primary" id="col-add">Add a passage</button>
+          <label class="btn" for="col-file">Import Kindle clippings…</label>
+          <input type="file" id="col-file" accept=".txt,text/plain" hidden>
+        </div>
+        <p class="muted small" id="col-status"></p>
+
+        <h3>How to send text here</h3>
+        <ul class="steps small">
+          <li><strong>Android</strong> — install the app (Chrome menu → <em>Install app</em>). Then select text in Chrome, Kindle, a PDF reader or any app → <em>Share</em> → <em>Aphorisms</em>.</li>
+          <li><strong>Computer</strong> — drag this button to your bookmarks bar: <a class="bookmarklet" id="col-bookmarklet" href="#">+ Aphorisms</a>. Select text on any web page and click it. (Browsers don't run bookmarklets inside their PDF viewer — copy the text and use <em>Add a passage</em>.)</li>
+          <li><strong>iPhone / iPad</strong> — create a Shortcut that accepts <em>Text</em> from the Share Sheet, then <em>Open URLs</em>: <code id="col-shortcut"></code> followed by the <em>URL-encoded</em> Shortcut Input.</li>
+          <li><strong>Kindle</strong> — besides sharing single highlights, connect the Kindle by USB and import <code>documents/My Clippings.txt</code> above.</li>
+        </ul>
+
+        <h3>Saved passages <span class="muted" id="col-count"></span></h3>
+        <ul class="list" id="col-list"></ul>
+      </section>
       <section class="panel" data-panel="notifications" role="tabpanel" hidden>
         <p class="muted small">Get the day's thought as a notification on this device — even when the app is closed.</p>
         <p class="notice" id="push-unsupported" hidden></p>
@@ -129,6 +150,28 @@
           </div>
         </div>
       </section>
+    </form>
+  </dialog>
+
+  <dialog id="share-dialog" class="dialog">
+    <form method="dialog" class="dialog-inner" id="share-form">
+      <header class="dialog-head">
+        <h2>Add to my collection</h2>
+        <button class="icon-btn" value="cancel" aria-label="Close">✕</button>
+      </header>
+      <label class="stack">Passage
+        <textarea id="share-text" rows="6" required></textarea>
+      </label>
+      <label class="stack">From (author, book or page)
+        <input type="text" id="share-from" placeholder="e.g. Marcus Aurelius, Meditations">
+      </label>
+      <input type="hidden" id="share-url">
+      <p class="muted small" id="share-hint"></p>
+      <div class="row wrap">
+        <button type="submit" class="btn primary" value="show">Save &amp; show now</button>
+        <button type="submit" class="btn" value="save">Save</button>
+        <button type="submit" class="btn" value="cancel" formnovalidate>Cancel</button>
+      </div>
     </form>
   </dialog>
 

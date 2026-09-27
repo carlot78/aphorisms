@@ -26,6 +26,10 @@ maintaining a quote list.
   (24 languages), always alongside the English original. Uses the browser's
   built-in on-device translator when available, otherwise the free MyMemory
   API with Google Translate as a fallback. Translations are cached locally.
+- **Send text from other apps** — share a passage from Chrome, Kindle, a PDF
+  reader… to Aphorisms (Android share sheet once installed; bookmarklet on
+  desktop; Shortcut on iPhone), or import Kindle `My Clippings.txt`. Saved
+  passages join the daily rotation as *My collection*.
 - **Push notifications** — optional daily notification with the day's thought
   (and its translation), sent by a GitHub Action; see below.
 - **Installable & offline** — it's a PWA. On a phone, "Add to Home Screen";
