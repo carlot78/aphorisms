@@ -30,6 +30,10 @@
         <a class="source" id="quote-source" target="_blank" rel="noopener"></a>
         <span class="cite" id="quote-cite"></span>
       </footer>
+      <div class="rate" id="rate" role="radiogroup" aria-label="Rate this thought">
+        <span class="rate-label" id="rate-label">How much did this speak to you?</span>
+        <span class="stars" id="stars"></span>
+      </div>
     </article>
 
     <section class="empty" id="empty" hidden>
@@ -75,6 +79,11 @@
       <section class="panel" data-panel="topics" role="tabpanel">
         <p class="muted small">Pick whole areas at once. Tap a topic to hear from everyone in it; fine-tune individual voices under <em>Sources</em>.</p>
         <div class="topic-grid" id="topic-grid"></div>
+
+        <h3>Your taste</h3>
+        <label class="switch"><input type="checkbox" id="taste-on"> Pick thoughts that suit me, based on my ratings</label>
+        <p class="muted small" id="taste-summary"></p>
+        <div class="row"><button type="button" class="btn danger" id="taste-reset">Clear my ratings</button></div>
       </section>
 
       <section class="panel" data-panel="sources" role="tabpanel" hidden>

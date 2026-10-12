@@ -30,6 +30,10 @@ maintaining a quote list.
   reader… to Aphorisms (Android share sheet once installed; bookmarklet on
   desktop; Shortcut on iPhone), or import Kindle `My Clippings.txt`. Saved
   passages join the daily rotation as *My collection*.
+- **Ratings that learn your taste** — rate each thought with 1–5 stars; after a
+  few ratings the daily pick leans towards the sources and themes you rate
+  highly (one pick in five stays random). See and reset what it learned in
+  Settings → Topics.
 - **Push notifications** — optional daily notification with the day's thought
   (and its translation), sent by a GitHub Action; see below.
 - **Installable & offline** — it's a PWA. On a phone, "Add to Home Screen";

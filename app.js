@@ -3,6 +3,7 @@ import { fetchSource, hash } from './src/wikiquote.js';
 import { translate, LANGUAGES, languageName } from './src/translate.js';
 import { flagSvg } from './src/flags.js';
 import { parseShared, parseClippings, bookmarklet } from './src/collection.js';
+import { buildProfile, pickPersonal, summarize, MIN_RATINGS } from './src/taste.js';
 import { pushSupported, isIos, isStandalone, currentSubscription, subscribe, unsubscribe, buildConfig, showLocalNotification, readLatestPush } from './src/push.js';
 
 const FRESH_MS = 7 * 24 * 3600 * 1000; // re-fetch a source after a week
@@ -29,6 +30,7 @@ const el = {
   pushConfig: $('push-config'), pushCopy: $('push-copy'),
   colAdd: $('col-add'), colFile: $('col-file'), colStatus: $('col-status'), colList: $('col-list'), colCount: $('col-count'),
   colBookmarklet: $('col-bookmarklet'), colShortcut: $('col-shortcut'),
+  stars: $('stars'), rateLabel: $('rate-label'), tasteOn: $('taste-on'), tasteSummary: $('taste-summary'), tasteReset: $('taste-reset'),
   sharePaste: $('share-paste'), shareDialog: $('share-dialog'), shareText: $('share-text'), shareFrom: $('share-from'), shareUrl: $('share-url'), shareHint: $('share-hint'),
 };
 
@@ -71,6 +73,7 @@ let settings = store.get('settings', null) || {
   salt: Math.random().toString(36).slice(2),
 };
 settings.lang ||= ''; // translation language, '' = none (added after first release)
+settings.taste ??= true; // lean the daily pick towards highly rated sources/themes
 settings.pushHour ??= 8; // local hour for the daily push notification
 const saveSettings = () => store.set('settings', settings);
 
@@ -220,8 +223,7 @@ function pickQuote(rng) {
     store.set('seen', []); // everything shown once — start over
     unseen = buckets;
   }
-  const bucket = unseen[Math.floor(rng() * unseen.length)];
-  return bucket[Math.floor(rng() * bucket.length)];
+  return pickPersonal(unseen, settings.taste ? tasteProfile() : null, rng);
 }
 
 function markSeen(quote) {
@@ -300,6 +302,7 @@ function renderQuote(quote) {
   }
   el.cite.textContent = [quote.section, quote.cite].filter(Boolean).join(' · ');
   renderFavButton();
+  renderStars(quote);
   renderTranslation(quote);
 }
 
@@ -580,6 +583,7 @@ async function openSettings(tab) {
   renderLanguageGrid();
   renderNotifications();
   renderCollection();
+  renderTaste();
   renderDataStatus();
   el.ownLines.value = settings.ownLines;
   showTab(tab || store.get('ui.tab', 'topics'));
@@ -850,6 +854,81 @@ function bindCollection() {
   });
 }
 
+// ---------- ratings & personalisation ----------
+
+const RATING_LABELS = ['', 'Not for me', 'Meh', 'Fine', 'Good', 'Spoke to me'];
+
+const loadRatings = () => store.get('ratings', {});
+const ratingOf = (quote) => (quote ? loadRatings()[quote.id]?.r || 0 : 0);
+let profileCache = null;
+const tasteProfile = () => (profileCache ||= buildProfile(loadRatings()));
+
+function setRating(quote, r) {
+  const ratings = loadRatings();
+  if (!r) delete ratings[quote.id];
+  else ratings[quote.id] = { r, sourceId: quote.sourceId, text: quote.text, at: Date.now() };
+  store.set('ratings', ratings);
+  profileCache = null;
+}
+
+function renderStars(quote) {
+  const r = ratingOf(quote);
+  el.stars.replaceChildren(
+    ...[1, 2, 3, 4, 5].map((n) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'star';
+      b.textContent = n <= r ? '★' : '☆';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(n === r));
+      b.setAttribute('aria-label', `${n} star${n > 1 ? 's' : ''} — ${RATING_LABELS[n]}`);
+      b.title = RATING_LABELS[n];
+      b.dataset.on = String(n <= r);
+      b.addEventListener('click', () => {
+        if (!current) return;
+        setRating(current, n === ratingOf(current) ? 0 : n); // tap the same star again to clear
+        renderStars(current);
+        renderLists();
+      });
+      return b;
+    })
+  );
+  el.rateLabel.textContent = r ? RATING_LABELS[r] : 'How much did this speak to you?';
+}
+
+function renderTaste() {
+  el.tasteOn.checked = settings.taste;
+  const profile = tasteProfile();
+  if (profile.n < MIN_RATINGS) {
+    el.tasteSummary.textContent = `Rate a few thoughts with the stars under each one — after ${MIN_RATINGS} ratings the daily pick starts leaning towards what speaks to you (${profile.n} so far).`;
+    el.tasteReset.hidden = profile.n === 0;
+    return;
+  }
+  el.tasteReset.hidden = false;
+  const s = summarize(profile, (id) => findSource(id)?.name || (id === COLLECTION_ID ? 'My collection' : id));
+  const parts = [`${profile.n} ratings.`];
+  if (s.liked.length) parts.push(`More often: ${s.liked.map((x) => x.name).join(', ')}.`);
+  if (s.disliked.length) parts.push(`Less often: ${s.disliked.map((x) => x.name).join(', ')}.`);
+  if (s.themes.length) parts.push(`Themes you like: ${s.themes.join(', ')}.`);
+  parts.push('One pick in five stays random, so you keep discovering new voices.');
+  el.tasteSummary.textContent = parts.join(' ');
+}
+
+function bindTaste() {
+  el.tasteOn.addEventListener('change', () => {
+    settings.taste = el.tasteOn.checked;
+    saveSettings();
+  });
+  el.tasteReset.addEventListener('click', () => {
+    if (!confirm('Clear all your ratings? The daily pick goes back to fully random.')) return;
+    store.set('ratings', {});
+    profileCache = null;
+    renderTaste();
+    renderStars(current);
+    renderLists();
+  });
+}
+
 const isFav = (q) => store.get('favs', []).some((f) => f.id === q.id);
 
 function renderFavButton() {
@@ -892,7 +971,7 @@ function renderLists() {
     )
   );
   const history = store.get('history', []).filter((h) => h.date !== todayKey());
-  el.historyList.replaceChildren(...history.map((h) => quoteItem(h.quote, `${h.date} · ${findSource(h.quote.sourceId)?.name || h.quote.source}`)));
+  el.historyList.replaceChildren(...history.map((h) => { const r = ratingOf(h.quote); return quoteItem(h.quote, `${h.date} · ${findSource(h.quote.sourceId)?.name || h.quote.source}${r ? ` · ${"★".repeat(r)}` : ""}`); }));
 }
 
 
@@ -926,6 +1005,7 @@ function bind() {
   for (const tab of el.tabs) tab.addEventListener('click', () => showTab(tab.dataset.tab));
   bindNotifications();
   bindCollection();
+  bindTaste();
 
   el.dialog.addEventListener('close', async () => {
     settings.ownLines = el.ownLines.value;
