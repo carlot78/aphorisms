@@ -1,40 +1,47 @@
-import { SOURCES, TOPICS, CUSTOM_TOPIC, STARTER_IDS, customSource } from './src/sources.js';
+import { SOURCES, TOPICS, CUSTOM_TOPIC } from './src/sources.js';
 import { fetchSource, hash } from './src/wikiquote.js';
 import { translate, LANGUAGES, languageName } from './src/translate.js';
 import { flagSvg } from './src/flags.js';
 import { parseShared, parseClippings, bookmarklet } from './src/collection.js';
-import { buildProfile, pickPersonal, summarize, MIN_RATINGS } from './src/taste.js';
+import { buildProfile, pickPersonal, globalScore } from './src/taste.js';
 import { THEMES, themeById, themesOf } from './src/themes.js';
+import { emptyJourney, visit, liveStreak, levelOf, stats, checkBadges, roman, BADGES, XP } from './src/journey.js';
+import { communityEnabled, sendVote, fetchScores, toVote } from './src/community.js';
 import { pushSupported, isIos, isStandalone, currentSubscription, subscribe, unsubscribe, buildConfig, showLocalNotification, readLatestPush } from './src/push.js';
 
-const FRESH_MS = 7 * 24 * 3600 * 1000; // re-fetch a source after a week
+const FRESH_MS = 7 * 24 * 3600 * 1000; // re-fetch sources and themes weekly
 const SNAPSHOT_RETRY_MS = 24 * 3600 * 1000;
-const MAX_QUOTES_PER_SOURCE = 400; // keep localStorage well under its limit
+const GLOBAL_TTL = 6 * 3600 * 1000; // community scores
+const MAX_QUOTES_PER_SOURCE = 400;
+const MAX_THEME_QUOTES = 250;
 const MAX_SEEN = 3000;
 const MAX_HISTORY = 90;
+const MAX_TRANSLATIONS = 300;
 const CONCURRENCY = 3;
-const OWN_ID = 'own';
+const DISCOVER_RATE = 1 / 7; // a new voice roughly once a week
+const THUMB_TTL = 30 * 24 * 3600 * 1000;
+const COLLECTION_ID = 'collection';
+const APP_URL = new URL('./', location.href).href;
 
 const $ = (id) => document.getElementById(id);
 const el = {
-  date: $('date'), card: $('card'), text: $('quote-text'), source: $('quote-source'), cite: $('quote-cite'),
-  empty: $('empty'), emptyMsg: $('empty-msg'), emptyAction: $('empty-action'), actions: $('actions'),
-  another: $('another'), copy: $('copy'), fav: $('fav'), status: $('status'),
-  favList: $('fav-list'), historyList: $('history-list'),
-  dialog: $('sources-dialog'), openSources: $('open-sources'), groups: $('source-groups'), enabledCount: $('enabled-count'),
-  customTitle: $('custom-title'), addCustom: $('add-custom'), customHint: $('custom-hint'), ownLines: $('own-lines'),
-  refreshAll: $('refresh-all'), resetSeen: $('reset-seen'), resetAll: $('reset-all'), dataStatus: $('data-status'),
-  translation: $('quote-translation'), langHint: $('lang-hint'), flagGrid: $('flag-grid'), topicGrid: $('topic-grid'),
-  tabs: [...document.querySelectorAll('.tabs [role=tab]')], panels: [...document.querySelectorAll('.panel[data-panel]')],
-  pushUnsupported: $('push-unsupported'), pushControls: $('push-controls'), pushHour: $('push-hour'), pushEnable: $('push-enable'),
-  pushTest: $('push-test'), pushDisable: $('push-disable'), pushStatus: $('push-status'), pushSetup: $('push-setup'),
-  pushConfig: $('push-config'), pushCopy: $('push-copy'),
-  colAdd: $('col-add'), colFile: $('col-file'), colStatus: $('col-status'), colList: $('col-list'), colCount: $('col-count'),
-  colBookmarklet: $('col-bookmarklet'), colShortcut: $('col-shortcut'),
-  themeGrid: $('theme-grid'), modeButtons: [...document.querySelectorAll('[data-mode]')], modeNotes: [...document.querySelectorAll('.mode-note')],
-  discover: $('discover'), discoverText: $('discover-text'), discoverAdd: $('discover-add'), discoverOn: $('discover-on'),
-  stars: $('stars'), rateLabel: $('rate-label'), tasteOn: $('taste-on'), tasteSummary: $('taste-summary'), tasteReset: $('taste-reset'),
-  sharePaste: $('share-paste'), shareDialog: $('share-dialog'), shareText: $('share-text'), shareFrom: $('share-from'), shareUrl: $('share-url'), shareHint: $('share-hint'),
+  date: $('date'), streakBtn: $('journey-open'), streakN: $('streak-n'), settingsOpen: $('settings-open'),
+  seal: $('seal'), card: $('card'), text: $('quote-text'), translation: $('quote-translation'),
+  source: $('quote-source'), cite: $('quote-cite'), community: $('community'),
+  discover: $('discover'), discoverText: $('discover-text'), discoverAdd: $('discover-add'),
+  faces: $('faces'), rateLabel: $('rate-label'),
+  empty: $('empty'), emptyMsg: $('empty-msg'), actions: $('actions'), another: $('another'), fav: $('fav'), share: $('share'),
+  favList: $('fav-list'), historyList: $('history-list'), status: $('status'), toast: $('toast'),
+  welcome: $('welcome'), welcomeThemes: $('welcome-themes'), welcomeGo: $('welcome-go'),
+  settings: $('settings'), themeGrid: $('theme-grid'), groups: $('source-groups'), followCount: $('follow-count'), authorsSection: $('authors-section'),
+  flagGrid: $('flag-grid'), langCurrent: $('lang-current'),
+  pushCurrent: $('push-current'), pushUnsupported: $('push-unsupported'), pushControls: $('push-controls'), pushHour: $('push-hour'),
+  pushEnable: $('push-enable'), pushTest: $('push-test'), pushDisable: $('push-disable'), pushStatus: $('push-status'),
+  pushSetup: $('push-setup'), pushConfig: $('push-config'), pushCopy: $('push-copy'),
+  colCount: $('col-count'), colAdd: $('col-add'), colFile: $('col-file'), colStatus: $('col-status'), colList: $('col-list'), colBookmarklet: $('col-bookmarklet'),
+  communityNote: $('community-note'), resetAll: $('reset-all'),
+  journey: $('journey'), levelName: $('level-name'), levelBar: $('level-bar'), levelNext: $('level-next'), stats: $('stats'), calendar: $('calendar'), badges: $('badges'),
+  shareDialog: $('share-dialog'), shareText: $('share-text'), shareFrom: $('share-from'), shareUrl: $('share-url'), shareHint: $('share-hint'), sharePaste: $('share-paste'),
 };
 
 // ---------- storage ----------
@@ -52,40 +59,38 @@ const store = {
     try {
       localStorage.setItem('aph.' + key, JSON.stringify(value));
     } catch (err) {
-      setStatus('Storage is full — try enabling fewer sources.');
+      setStatus('Storage is full — try fewer themes or authors.');
       console.warn(err);
     }
   },
   remove(key) {
     try { localStorage.removeItem('aph.' + key); } catch { /* ignore */ }
   },
-  keys(prefix) {
+  keys() {
     const out = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith('aph.' + prefix)) out.push(k.slice(4));
+      if (k && k.startsWith('aph.')) out.push(k.slice(4));
     }
     return out;
   },
 };
 
-let settings = store.get('settings', null) || {
-  enabled: [...STARTER_IDS],
-  customs: [],
-  ownLines: '',
-  salt: Math.random().toString(36).slice(2),
-};
-settings.lang ||= ''; // translation language, '' = none (added after first release)
-settings.mode ||= 'authors'; // 'authors' or 'themes'
+// Settings: themes + followed authors (+ own passages) make the pool. Older
+// versions had modes and switches; they are folded into this one model.
+const firstRun = !store.get('settings', null);
+const settings = store.get('settings', null) || { enabled: [], customs: [], salt: Math.random().toString(36).slice(2) };
+settings.enabled ||= [];
+settings.customs ||= [];
 settings.themes ||= [];
-settings.discover ??= true; // now and then, an author the reader hasn't chosen
-settings.taste ??= true; // lean the daily pick towards highly rated sources/themes
-settings.pushHour ??= 8; // local hour for the daily push notification
+settings.lang ||= '';
+settings.pushHour ??= 8;
+for (const old of ['mode', 'taste', 'discover']) delete settings[old];
 const saveSettings = () => store.set('settings', settings);
 
-/** All selectable sources: catalog + user-added Wikiquote pages. */
 const allSources = () => [...SOURCES, ...settings.customs];
-const findSource = (id) => (id === OWN_ID ? { id: OWN_ID, name: 'My own lines', title: 'My own lines' } : allSources().find((s) => s.id === id));
+const findSource = (id) => allSources().find((s) => s.id === id);
+const nameOf = (q) => findSource(q.sourceId)?.name || q.source;
 
 // ---------- dates & randomness ----------
 
@@ -103,9 +108,15 @@ function mulberry32(seed) {
   };
 }
 
-// ---------- source loading ----------
+function sample(quotes, max) {
+  if (quotes.length <= max) return quotes;
+  const step = quotes.length / max;
+  return Array.from({ length: max }, (_, i) => quotes[Math.floor(i * step)]);
+}
 
-const sourceCache = new Map(); // id -> { id, title, url, fetchedAt, origin, quotes }
+// ---------- sources (followed authors) ----------
+
+const sourceCache = new Map();
 
 function loadCached(id) {
   if (!sourceCache.has(id)) {
@@ -115,21 +126,9 @@ function loadCached(id) {
   return sourceCache.get(id) || null;
 }
 
-function sample(quotes, max) {
-  if (quotes.length <= max) return quotes;
-  const step = quotes.length / max;
-  const out = [];
-  for (let i = 0; i < max; i++) out.push(quotes[Math.floor(i * step)]);
-  return out;
-}
-
 function storeSource(id, page, origin) {
   const data = {
-    id,
-    title: page.title,
-    url: page.url,
-    fetchedAt: Date.now(),
-    origin,
+    id, title: page.title, url: page.url, fetchedAt: Date.now(), origin,
     quotes: sample(page.quotes, MAX_QUOTES_PER_SOURCE).map((q) => ({ ...q, sourceId: id })),
   };
   sourceCache.set(id, data);
@@ -143,108 +142,136 @@ async function fetchSnapshot(id) {
   return res.json();
 }
 
-/** Fetch one source: live Wikiquote first, bundled snapshot as fallback. */
+/** Live Wikiquote first, the weekly snapshot as fallback. */
 async function refreshSource(src) {
   try {
     const page = await fetchSource(src.title);
     if (!page.quotes.length) throw new Error('no quotes parsed');
     return storeSource(src.id, page, 'live');
   } catch (liveErr) {
-    console.warn(`Live fetch failed for ${src.title}:`, liveErr.message);
     if (src.custom) throw liveErr;
-    const snap = await fetchSnapshot(src.id);
-    return storeSource(src.id, snap, 'snapshot');
+    return storeSource(src.id, await fetchSnapshot(src.id), 'snapshot');
   }
 }
 
-function ownSource() {
-  const lines = settings.ownLines.split('\n').map((l) => l.trim()).filter((l) => l.length > 3);
-  if (!lines.length) return null;
-  return {
-    id: OWN_ID,
-    title: 'My own lines',
-    quotes: lines.map((text) => ({ id: hash('own|' + text), text, source: 'My own lines', section: '', cite: '', sourceId: OWN_ID })),
-  };
-}
-
-/**
- * Make sure every enabled source has quotes available. Stale or missing
- * sources are fetched in the background; `onLoaded` fires after each one so
- * the UI can show something as soon as anything is available.
- */
-async function ensureSources({ force = false, onLoaded } = {}) {
-  const wanted = settings.enabled.map(findSource).filter(Boolean);
-  const queue = wanted.filter((src) => {
+async function ensureSources({ onLoaded } = {}) {
+  const queue = settings.enabled.map(findSource).filter(Boolean).filter((src) => {
     const c = loadCached(src.id);
     const age = c ? Date.now() - c.fetchedAt : Infinity;
-    // Snapshot-backed sources retry the live fetch daily; live ones weekly.
-    return force || !c || age > (c.origin === 'snapshot' ? SNAPSHOT_RETRY_MS : FRESH_MS);
+    return !c || age > (c.origin === 'snapshot' ? SNAPSHOT_RETRY_MS : FRESH_MS);
   });
-  if (!queue.length) return { failed: [] };
-
-  const failed = [];
-  let done = 0;
   const worker = async () => {
     while (queue.length) {
       const src = queue.shift();
-      const hadCache = !!loadCached(src.id);
-      setStatus(`Fetching ${src.name}… (${done + 1}/${done + queue.length + 1})`);
       try {
         await refreshSource(src);
         onLoaded?.(src);
       } catch (err) {
-        if (!hadCache) failed.push(src);
         console.warn(err);
       }
-      done++;
     }
   };
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-  setStatus(failed.length ? `Couldn't load: ${failed.map((s) => s.name).join(', ')}` : '');
-  renderDataStatus();
-  return { failed };
 }
 
-// ---------- picking ----------
+// ---------- themes ----------
+
+const loadThemeCached = (id) => store.get('theme.' + id, null);
+
+async function ensureThemes() {
+  for (const id of settings.themes) {
+    const c = loadThemeCached(id);
+    if (c && Date.now() - c.fetchedAt < FRESH_MS) continue;
+    try {
+      const res = await fetch(`data/themes/${encodeURIComponent(id)}.json`, { cache: 'no-cache' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      store.set('theme.' + id, { fetchedAt: Date.now(), quotes: sample(data.quotes, MAX_THEME_QUOTES) });
+    } catch (err) {
+      console.warn(`Theme ${id}:`, err.message);
+    }
+  }
+}
+
+const matchesChosenThemes = (text) => themesOf(text).some((t) => settings.themes.includes(t));
+
+// ---------- own passages ("My collection") ----------
+
+const loadCollection = () => store.get('collection', []);
+
+function collectionQuote({ text, attribution, url }) {
+  return {
+    id: hash('col|' + text.toLowerCase().replace(/\s+/g, ' ')),
+    text, source: attribution || 'Your passages', section: '', cite: attribution ? 'Your passages' : '',
+    url: url || '', sourceId: COLLECTION_ID, added: Date.now(),
+  };
+}
+
+function addToCollection(entries) {
+  const items = loadCollection();
+  const ids = new Set(items.map((q) => q.id));
+  let added = 0;
+  for (const e of entries) {
+    const text = (e.text || '').trim();
+    if (text.length < 3) continue;
+    const q = collectionQuote({ ...e, text });
+    if (ids.has(q.id)) continue;
+    ids.add(q.id);
+    items.unshift(q);
+    added++;
+  }
+  store.set('collection', items);
+  if (added) reward(XP.passage * added, (j) => { j.passages += added; });
+  return added;
+}
+
+// ---------- the daily pick ----------
+
+let current = null;
 
 function pool() {
   const buckets = [];
-  // Theme mode: one bucket per chosen theme, spanning every author.
-  const keep = themeMode() ? (q) => matchesChosenThemes(q.text) : () => true;
-  if (themeMode()) {
-    for (const id of settings.themes) {
-      const t = loadThemeCached(id);
-      if (t?.quotes?.length) buckets.push(t.quotes);
-    }
-  } else {
-    for (const id of settings.enabled) {
-      const c = loadCached(id);
-      if (c?.quotes?.length) buckets.push(c.quotes);
-    }
+  for (const id of settings.themes) {
+    const t = loadThemeCached(id);
+    if (t?.quotes?.length) buckets.push(t.quotes);
   }
-  const own = ownSource()?.quotes.filter(keep);
-  if (own?.length) buckets.push(own);
-  const col = collectionSource()?.quotes.filter(keep);
-  if (col?.length) buckets.push(col); // the whole collection counts as one source
+  for (const id of settings.enabled) {
+    const c = loadCached(id);
+    if (c?.quotes?.length) buckets.push(c.quotes);
+  }
+  const col = loadCollection();
+  if (col.length) buckets.push(col);
   return buckets;
 }
 
+let profileCache = null;
+const loadRatings = () => store.get('ratings', {});
+const tasteProfile = () => (profileCache ||= buildProfile(loadRatings()));
+const globalScores = () => store.get('global', null)?.data || null;
+
 function pickQuote(rng) {
-  let buckets = pool();
+  const buckets = pool();
   if (!buckets.length) return null;
   const seen = new Set(store.get('seen', []));
   let unseen = buckets.map((b) => b.filter((q) => !seen.has(q.id))).filter((b) => b.length);
   if (!unseen.length) {
-    store.set('seen', []); // everything shown once — start over
+    store.set('seen', []);
     unseen = buckets;
   }
-  const profile = settings.taste ? tasteProfile() : null;
-  // Now and then: an author the reader hasn't chosen and has never met.
-  const discovery = !themeMode() && settings.discover ? store.get('discover', null) : null;
+  const opts = { global: globalScores() };
+  const discovery = store.get('discover', null);
   if (discovery && rng() < DISCOVER_RATE) {
-    return { ...pickPersonal([discovery.quotes], profile, rng), discover: true };
+    return { ...pickPersonal([discovery.quotes], tasteProfile(), rng, opts), discover: true };
   }
-  return pickPersonal(unseen, profile, rng, { bySource: !themeMode() });
+  return pickPersonal(unseen, tasteProfile(), rng, opts);
+}
+
+/** Can `q` stay as today's thought after the selection changed? */
+function stillEligible(q) {
+  if (!q) return false;
+  if (q.discover) return true;
+  if (q.sourceId === COLLECTION_ID) return loadCollection().some((x) => x.id === q.id);
+  return settings.enabled.includes(q.sourceId) || matchesChosenThemes(q.text);
 }
 
 function markSeen(quote) {
@@ -262,722 +289,41 @@ function recordHistory(date, quote) {
   store.set('history', history.slice(0, MAX_HISTORY));
 }
 
-let current = null;
+/** Make `quote` today's thought (bookkeeping + journey). */
+function adopt(quote, date = todayKey()) {
+  current = quote;
+  markSeen(quote);
+  store.set('today', { date, quote });
+  recordHistory(date, quote);
+  const fresh = meet(quote.sourceId);
+  const themes = themesOf(quote.text);
+  reward(fresh ? XP.newVoice : 0, (j) => { j.themesRead = [...new Set([...j.themesRead, ...themes])]; });
+  if (fresh && quote.discover) toast(`A new voice: ${nameOf(quote)} · +${XP.newVoice}`);
+  if (quote.discover) {
+    store.remove('discover');
+    prepareDiscovery();
+  }
+}
 
 function showToday({ replace = false } = {}) {
   const date = todayKey();
-  let today = store.get('today', null);
+  const today = store.get('today', null);
   if (!replace && today?.date === date && today.quote) {
     current = today.quote;
   } else {
-    const seedStr = date + settings.salt + (replace ? Date.now() : '');
-    const quote = pickQuote(mulberry32(parseInt(hash(seedStr), 16)));
+    const quote = pickQuote(mulberry32(parseInt(hash(date + settings.salt + (replace ? Date.now() : '')), 16)));
     if (!quote) {
       current = null;
-      renderQuote(null);
+      renderQuote();
       return;
     }
-    current = quote;
-    markSeen(quote);
-    meet(quote.sourceId);
-    store.set('today', { date, quote });
-    recordHistory(date, quote);
-    if (quote.discover) {
-      store.remove('discover'); // used up — line up the next new voice
-      prepareDiscovery();
-    }
+    adopt(quote, date);
   }
-  renderQuote(current);
+  renderQuote();
   renderLists();
-}
-
-// ---------- rendering ----------
-
-function setStatus(msg) {
-  el.status.textContent = msg;
-}
-
-function renderQuote(quote) {
-  if (!quote) {
-    el.card.hidden = true;
-    el.actions.hidden = true;
-    el.empty.hidden = false;
-    const hasEnabled = settings.enabled.length || ownSource();
-    el.emptyMsg.textContent = hasEnabled ? 'Nothing loaded yet — check your connection or pick other sources.' : 'Pick a few sources to begin.';
-    el.emptyAction.hidden = false;
-    return;
-  }
-  el.empty.hidden = true;
-  el.card.hidden = false;
-  el.actions.hidden = false;
-  el.card.style.animation = 'none';
-  void el.card.offsetWidth; // restart the entrance animation
-  el.card.style.animation = '';
-
-  el.text.textContent = quote.text;
-  el.text.classList.toggle('long', quote.text.length > 280);
-  const src = findSource(quote.sourceId);
-  const cached = quote.sourceId === OWN_ID ? null : loadCached(quote.sourceId);
-  el.source.textContent = src?.name || quote.source;
-  const href = quote.url || cached?.url;
-  if (href) {
-    el.source.href = href;
-    el.source.removeAttribute('aria-disabled');
-  } else {
-    el.source.removeAttribute('href');
-  }
-  el.cite.textContent = [quote.section, quote.cite].filter(Boolean).join(' · ');
-  renderFavButton();
-  renderStars(quote);
-  renderDiscover(quote);
-  renderTranslation(quote);
-}
-
-// ---------- translation ----------
-
-const MAX_TRANSLATIONS = 300;
-let translationSeq = 0; // ignore results of a translation that was superseded
-
-function cachedTranslation(quote, lang) {
-  return store.get('tr', {})[`${lang}:${quote.id}`] || '';
-}
-
-function rememberTranslation(quote, lang, text) {
-  const cache = store.get('tr', {});
-  cache[`${lang}:${quote.id}`] = text;
-  const keys = Object.keys(cache);
-  for (const k of keys.slice(0, Math.max(0, keys.length - MAX_TRANSLATIONS))) delete cache[k];
-  store.set('tr', cache);
-}
-
-/** Show `quote` translated into the chosen language under the English text. */
-async function renderTranslation(quote) {
-  const lang = settings.lang;
-  const seq = ++translationSeq;
-  el.translation.hidden = !lang;
-  if (!lang) return;
-  el.translation.setAttribute('lang', lang);
-
-  const hit = cachedTranslation(quote, lang);
-  if (hit) {
-    el.translation.textContent = hit;
-    el.translation.classList.remove('pending');
-    return;
-  }
-  el.translation.textContent = 'Translating…';
-  el.translation.classList.add('pending');
-  try {
-    const text = await translate(quote.text, lang);
-    if (seq !== translationSeq) return;
-    rememberTranslation(quote, lang, text);
-    el.translation.textContent = text;
-  } catch (err) {
-    console.warn('Translation failed:', err.message);
-    if (seq !== translationSeq) return;
-    el.translation.textContent = `Translation into ${languageName(lang)} unavailable right now.`;
-  } finally {
-    if (seq === translationSeq) el.translation.classList.remove('pending');
-  }
-}
-
-// ---------- settings UI: topics, sources, translation ----------
-
-const THUMB_TTL = 30 * 24 * 3600 * 1000;
-const TABS = ['themes', 'topics', 'sources', 'translation', 'collection', 'notifications'];
-
-/**
- * Portrait thumbnails come from Wikipedia's `pageimages` API (the Wikiquote
- * titles match Wikipedia's, redirects included). Cached for a month; a source
- * with no image is cached as '' so we don't ask again.
- */
-async function ensureThumbs(sources) {
-  const thumbs = store.get('thumbs', {});
-  const todo = sources.filter((s) => !thumbs[s.id] || Date.now() - thumbs[s.id].at > THUMB_TTL);
-  if (!todo.length) return false;
-  for (let i = 0; i < todo.length; i += 50) {
-    const batch = todo.slice(i, i + 50);
-    const params = new URLSearchParams({
-      action: 'query', prop: 'pageimages', piprop: 'thumbnail', pithumbsize: '96', redirects: '1',
-      format: 'json', formatversion: '2', origin: '*', titles: batch.map((s) => s.title).join('|'),
-    });
-    try {
-      const res = await fetch(`https://en.wikipedia.org/w/api.php?${params}`);
-      const q = (await res.json()).query || {};
-      const alias = new Map([...(q.normalized || []), ...(q.redirects || [])].map((r) => [r.from, r.to]));
-      const resolve = (t) => { for (let n = 0; n < 5 && alias.has(t); n++) t = alias.get(t); return t; };
-      const byTitle = new Map((q.pages || []).map((p) => [p.title, p]));
-      for (const s of batch) thumbs[s.id] = { url: byTitle.get(resolve(s.title))?.thumbnail?.source || '', at: Date.now() };
-    } catch (err) {
-      console.warn('Thumbnail lookup failed:', err.message);
-      return false;
-    }
-  }
-  store.set('thumbs', thumbs);
-  return true;
-}
-
-const initials = (name) => name.split(/\s+/).filter((w) => /^[A-Za-zÀ-ž]/.test(w)).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
-
-function avatarEl(src, thumbs) {
-  const wrap = document.createElement('span');
-  wrap.className = 'avatar';
-  const url = thumbs[src.id]?.url;
-  if (url) {
-    const img = document.createElement('img');
-    img.src = url;
-    img.alt = '';
-    img.loading = 'lazy';
-    img.decoding = 'async';
-    img.referrerPolicy = 'no-referrer';
-    img.addEventListener('error', () => { img.remove(); wrap.textContent = initials(src.name); });
-    wrap.append(img);
-  } else {
-    wrap.textContent = initials(src.name);
-  }
-  return wrap;
-}
-
-const topicsWithCustom = () => [...TOPICS, ...(settings.customs.length ? [CUSTOM_TOPIC] : [])];
-
-function topicState(items) {
-  const on = items.filter((s) => settings.enabled.includes(s.id)).length;
-  return { on, state: on === 0 ? 'none' : on === items.length ? 'all' : 'some' };
-}
-
-function renderTopics() {
-  el.topicGrid.replaceChildren(
-    ...topicsWithCustom().map((topic) => {
-      const items = allSources().filter((s) => s.group === topic.name);
-      const { on, state } = topicState(items);
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'topic';
-      btn.dataset.state = state;
-      btn.setAttribute('aria-pressed', state === 'all' ? 'true' : state === 'some' ? 'mixed' : 'false');
-      btn.title = state === 'all' ? 'Click to deselect all' : 'Click to select all';
-      btn.innerHTML = '<span class="icon" aria-hidden="true"></span><span class="body"><span class="name"></span><span class="blurb"></span><span class="meta"></span></span>';
-      btn.querySelector('.icon').textContent = topic.icon;
-      btn.querySelector('.name').textContent = topic.name;
-      btn.querySelector('.blurb').textContent = topic.blurb;
-      btn.querySelector('.meta').textContent = `${on} of ${items.length} selected`;
-      btn.addEventListener('click', () => {
-        const turnOn = state !== 'all';
-        for (const s of items) setEnabled(s.id, turnOn);
-        renderTopics();
-        renderSources();
-      });
-      return btn;
-    })
-  );
-  renderEnabledCount();
-}
-
-function renderSources() {
-  const thumbs = store.get('thumbs', {});
-  el.groups.replaceChildren(
-    ...topicsWithCustom().map((topic) => {
-      const items = allSources().filter((s) => s.group === topic.name);
-      const wrap = document.createElement('div');
-      wrap.className = 'group';
-      const h = document.createElement('h4');
-      h.textContent = `${topic.icon} ${topic.name}`;
-      const tools = document.createElement('span');
-      tools.className = 'group-tools';
-      for (const [label, on] of [['all', true], ['none', false]]) {
-        const a = document.createElement('a');
-        a.textContent = label;
-        a.addEventListener('click', () => {
-          for (const s of items) setEnabled(s.id, on);
-          renderSources();
-          renderTopics();
-        });
-        tools.append(a);
-      }
-      h.append(tools);
-      const grid = document.createElement('div');
-      grid.className = 'people';
-      for (const s of items) {
-        const label = document.createElement('label');
-        label.className = 'person';
-        label.title = s.blurb || '';
-        const input = document.createElement('input');
-        input.type = 'checkbox';
-        input.checked = settings.enabled.includes(s.id);
-        input.addEventListener('change', () => {
-          setEnabled(s.id, input.checked);
-          renderEnabledCount();
-          renderTopics();
-        });
-        const text = document.createElement('span');
-        text.className = 'text';
-        const name = document.createElement('span');
-        name.className = 'name';
-        name.textContent = s.name;
-        const blurb = document.createElement('span');
-        blurb.className = 'blurb';
-        const cached = loadCached(s.id);
-        blurb.textContent = [s.blurb, cached ? `${cached.quotes.length} quotes` : ''].filter(Boolean).join(' · ');
-        text.append(name, blurb);
-        label.append(input, avatarEl(s, thumbs), text);
-        if (s.custom) {
-          const rm = document.createElement('button');
-          rm.type = 'button';
-          rm.className = 'rm';
-          rm.textContent = '✕';
-          rm.title = 'Remove this source';
-          rm.addEventListener('click', (e) => {
-            e.preventDefault();
-            settings.customs = settings.customs.filter((c) => c.id !== s.id);
-            setEnabled(s.id, false);
-            store.remove('src.' + s.id);
-            sourceCache.delete(s.id);
-            renderSources();
-            renderTopics();
-          });
-          label.append(rm);
-        }
-        grid.append(label);
-      }
-      wrap.append(h, grid);
-      return wrap;
-    })
-  );
-  renderEnabledCount();
-}
-
-function renderEnabledCount() {
-  el.enabledCount.textContent = themeMode()
-    ? `${settings.themes.length} theme${settings.themes.length === 1 ? '' : 's'}`
-    : `${settings.enabled.length} selected`;
-}
-
-function renderLanguageGrid() {
-  const options = LANGUAGES.map((code) => ({ code, native: languageName(code, code), local: languageName(code) }))
-    .sort((a, b) => a.native.localeCompare(b.native));
-  const card = ({ code, native, local }, flag) => {
-    const label = document.createElement('label');
-    label.className = 'flag';
-    const input = document.createElement('input');
-    input.type = 'radio';
-    input.name = 'lang';
-    input.value = code;
-    input.checked = settings.lang === code;
-    input.addEventListener('change', () => {
-      settings.lang = code;
-      saveSettings();
-      renderLangHint();
-      if (current) renderTranslation(current);
-    });
-    const art = document.createElement('span');
-    art.className = 'art';
-    art.innerHTML = flag; // trusted: our own SVG module
-    const text = document.createElement('span');
-    text.className = 'text';
-    const n = document.createElement('span');
-    n.className = 'native';
-    n.textContent = native;
-    text.append(n);
-    if (local && local.toLowerCase() !== native.toLowerCase()) {
-      const l = document.createElement('span');
-      l.className = 'local';
-      l.textContent = local;
-      text.append(l);
-    }
-    label.append(input, art, text);
-    return label;
-  };
-  el.flagGrid.replaceChildren(
-    card({ code: '', native: 'English only', local: 'No translation' }, '<span class="none" aria-hidden="true">—</span>'),
-    ...options.map((o) => card(o, flagSvg(o.code)))
-  );
-  renderLangHint();
-}
-
-function renderLangHint() {
-  el.langHint.textContent = settings.lang
-    ? 'Translated automatically (on-device when your browser supports it, otherwise via MyMemory / Google). The English original always stays.'
-    : '';
-}
-
-function showTab(name) {
-  if (!TABS.includes(name)) name = TABS[0];
-  for (const tab of el.tabs) tab.setAttribute('aria-selected', String(tab.dataset.tab === name));
-  for (const panel of el.panels) panel.hidden = panel.dataset.panel !== name;
-  store.set('ui.tab', name);
-}
-
-async function openSettings(tab) {
-  renderTopics();
-  renderSources();
-  renderLanguageGrid();
-  renderNotifications();
-  renderCollection();
-  renderTaste();
-  renderThemes();
-  renderMode();
-  el.discoverOn.checked = settings.discover;
-  renderDataStatus();
-  el.ownLines.value = settings.ownLines;
-  showTab(tab || store.get('ui.tab', 'topics'));
-  el.dialog.showModal();
-  // Portraits load in the background; re-render the list once they arrive.
-  if ((await ensureThumbs(allSources())) && el.dialog.open) renderSources();
-}
-
-// ---------- notifications (Web Push) ----------
-
-const timeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-
-async function renderNotifications() {
-  const supported = pushSupported() && location.protocol !== 'file:';
-  el.pushUnsupported.hidden = supported;
-  el.pushControls.hidden = !supported;
-  if (!supported) {
-    el.pushUnsupported.textContent = isIos() && !isStandalone()
-      ? 'On iPhone and iPad, notifications only work for installed apps: tap Share → "Add to Home Screen", then open Aphorisms from there.'
-      : 'This browser does not support push notifications.';
-    return;
-  }
-  if (!el.pushHour.options.length) {
-    for (let h = 0; h < 24; h++) el.pushHour.append(new Option(`${String(h).padStart(2, '0')}:00`, h));
-  }
-  el.pushHour.value = settings.pushHour;
-
-  let sub = null;
-  let swError = '';
-  try {
-    sub = await currentSubscription();
-  } catch (err) {
-    swError = err.message;
-  }
-  const permission = Notification.permission;
-  el.pushEnable.hidden = !!sub;
-  el.pushTest.hidden = !sub;
-  el.pushDisable.hidden = !sub;
-  el.pushSetup.hidden = !sub;
-  if (sub) {
-    el.pushStatus.textContent = permission === 'granted'
-      ? `Enabled on this device — one thought a day at ${String(settings.pushHour).padStart(2, '0')}:00 (${timeZone()}).`
-      : 'Subscribed, but notifications are blocked in the browser settings for this site.';
-    el.pushConfig.value = JSON.stringify(buildConfig({ subscription: sub, sources: settings.enabled, mode: settings.mode, themes: settings.themes, lang: settings.lang, hour: settings.pushHour, timeZone: timeZone() }));
-  } else {
-    el.pushStatus.textContent = swError
-      ? `Cannot enable here: ${swError}`
-      : permission === 'denied'
-        ? 'Notifications are blocked for this site. Allow them in the browser settings, then try again.'
-        : 'Not enabled on this device.';
-    el.pushConfig.value = '';
-  }
-}
-
-/**
- * If the service worker received today's push, show that exact quote so the
- * notification and the app agree. Done once per day so "Another" still works.
- */
-async function adoptPushedQuote() {
-  const p = await readLatestPush();
-  const date = todayKey();
-  if (!p?.quote || p.date !== date || store.get('pushAdopted', '') === date) return false;
-  store.set('pushAdopted', date);
-  const quote = { ...p.quote };
-  if (p.translation && p.lang) rememberTranslation(quote, p.lang, p.translation);
-  current = quote;
-  markSeen(quote);
-  store.set('today', { date, quote });
-  recordHistory(date, quote);
-  renderQuote(quote);
-  renderLists();
-  return true;
-}
-
-function bindNotifications() {
-  el.pushHour.addEventListener('change', () => {
-    settings.pushHour = Number(el.pushHour.value);
-    saveSettings();
-    renderNotifications();
-  });
-
-  el.pushEnable.addEventListener('click', async () => {
-    el.pushEnable.disabled = true;
-    el.pushStatus.textContent = 'Asking for permission…';
-    try {
-      await subscribe();
-      await renderNotifications();
-      showTab('notifications');
-    } catch (err) {
-      el.pushStatus.textContent = `Could not enable: ${err.message}`;
-    } finally {
-      el.pushEnable.disabled = false;
-    }
-  });
-
-  el.pushDisable.addEventListener('click', async () => {
-    try {
-      await unsubscribe();
-    } catch (err) {
-      console.warn(err);
-    }
-    renderNotifications();
-  });
-
-  el.pushTest.addEventListener('click', async () => {
-    const who = current ? findSource(current.sourceId)?.name || current.source : '';
-    try {
-      await showLocalNotification('Thought for today', {
-        body: current ? `“${current.text}” — ${who}` : 'This is how the daily thought will look.',
-        icon: 'icon.svg',
-        tag: 'daily-thought-test',
-      });
-      el.pushStatus.textContent = 'Test notification shown (this one came from the app itself, not from the server).';
-    } catch (err) {
-      el.pushStatus.textContent = `Could not show a notification: ${err.message}`;
-    }
-  });
-
-  el.pushCopy.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(el.pushConfig.value);
-      el.pushCopy.textContent = 'Copied ✓';
-      setTimeout(() => { el.pushCopy.textContent = 'Copy configuration'; }, 1500);
-    } catch {
-      el.pushConfig.select();
-      el.pushStatus.textContent = 'Copy failed — select the text and copy it manually.';
-    }
-  });
-}
-
-// ---------- my collection (text shared in from other apps) ----------
-
-const COLLECTION_ID = 'collection';
-const APP_URL = new URL('./', location.href).href;
-
-const loadCollection = () => store.get('collection', []);
-
-function collectionSource() {
-  const items = loadCollection();
-  if (!items.length) return null;
-  return { id: COLLECTION_ID, title: 'My collection', quotes: items };
-}
-
-function collectionQuote({ text, attribution, url }) {
-  return {
-    id: hash('col|' + text.toLowerCase().replace(/\s+/g, ' ')),
-    text,
-    source: attribution || 'My collection',
-    section: '',
-    cite: attribution ? 'My collection' : '',
-    url: url || '',
-    sourceId: COLLECTION_ID,
-    added: Date.now(),
-  };
-}
-
-/** Add passages; returns how many were new. */
-function addToCollection(entries) {
-  const items = loadCollection();
-  const ids = new Set(items.map((q) => q.id));
-  let added = 0;
-  for (const e of entries) {
-    const text = (e.text || '').trim();
-    if (text.length < 3) continue;
-    const q = collectionQuote({ ...e, text });
-    if (ids.has(q.id)) continue;
-    ids.add(q.id);
-    items.unshift(q);
-    added++;
-  }
-  store.set('collection', items);
-  return added;
-}
-
-function renderCollection() {
-  const items = loadCollection();
-  el.colCount.textContent = items.length ? `(${items.length})` : '';
-  el.colList.replaceChildren(
-    ...items.map((q) =>
-      quoteItem(q, q.source, () => {
-        store.set('collection', loadCollection().filter((x) => x.id !== q.id));
-        renderCollection();
-      })
-    )
-  );
-  el.colBookmarklet.href = bookmarklet(APP_URL);
-  el.colShortcut.textContent = `${APP_URL}?share&text=`;
-}
-
-const SHARE_HINTS = {
-  selection: '',
-  fragment: 'Taken from the highlight in the shared link.',
-  partial: 'The link only holds the start and end of your selection — paste the full text to replace the “…”.',
-  page: 'Only the page link was shared, not a selection. In Chrome, select the text and tap Share in the pop-up next to it — or copy the text and tap Paste.',
-};
-
-function openShareDialog(shared = {}) {
-  const p = parseShared(shared);
-  el.shareText.value = p.text;
-  el.shareFrom.value = p.attribution;
-  el.shareUrl.value = p.url;
-  el.shareHint.textContent = SHARE_HINTS[p.kind] || '';
-  el.shareDialog.returnValue = '';
-  el.shareDialog.showModal();
-  el.shareText.focus();
-}
-
-/** Handle `?share&text=…&title=…&url=…` (share target, bookmarklet, Shortcut). */
-function consumeShareParams() {
-  const params = new URLSearchParams(location.search);
-  if (!params.has('share') && !params.has('text')) return;
-  const shared = { title: params.get('title') || '', text: params.get('text') || '', url: params.get('url') || '' };
-  history.replaceState(null, '', location.pathname); // don't re-open on reload
-  openShareDialog(shared);
-}
-
-function showQuoteNow(quote) {
-  const date = todayKey();
-  current = quote;
-  markSeen(quote);
-  store.set('today', { date, quote });
-  recordHistory(date, quote);
-  renderQuote(quote);
-  renderLists();
-}
-
-function bindCollection() {
-  el.colAdd.addEventListener('click', () => openShareDialog());
-
-  el.sharePaste.addEventListener('click', async () => {
-    try {
-      const clip = (await navigator.clipboard.readText()).trim();
-      if (!clip) throw new Error('empty');
-      el.shareText.value = parseShared({ text: clip }).text || clip;
-      el.shareHint.textContent = '';
-    } catch {
-      el.shareHint.textContent = 'Could not read the clipboard — long-press the box and choose Paste.';
-    }
-  });
-
-  el.shareDialog.addEventListener('close', () => {
-    const action = el.shareDialog.returnValue;
-    if (action !== 'save' && action !== 'show') return;
-    const entry = { text: el.shareText.value, attribution: el.shareFrom.value.trim(), url: el.shareUrl.value };
-    const added = addToCollection([entry]);
-    const quote = loadCollection().find((q) => q.id === collectionQuote({ ...entry, text: entry.text.trim() }).id);
-    if (action === 'show' && quote) showQuoteNow(quote);
-    setStatus(added ? 'Saved to your collection.' : 'Already in your collection.');
-    setTimeout(() => setStatus(''), 2000);
-    if (el.dialog.open) renderCollection();
-  });
-
-  el.colFile.addEventListener('change', async () => {
-    const file = el.colFile.files[0];
-    if (!file) return;
-    try {
-      const entries = parseClippings(await file.text());
-      const added = addToCollection(entries);
-      el.colStatus.textContent = entries.length
-        ? `Imported ${added} new highlight${added === 1 ? '' : 's'} (${entries.length - added} already there).`
-        : 'No highlights found — is this a Kindle "My Clippings.txt"?';
-      renderCollection();
-    } catch (err) {
-      el.colStatus.textContent = `Import failed: ${err.message}`;
-    } finally {
-      el.colFile.value = '';
-    }
-  });
-}
-
-// ---------- choosing by themes ----------
-
-const MAX_THEME_QUOTES = 250; // per theme in localStorage
-
-const themeMode = () => settings.mode === 'themes';
-
-function loadThemeCached(id) {
-  return store.get('theme.' + id, null);
-}
-
-/** Fetch the selected themes' quote lists (built weekly by the Action). */
-async function ensureThemes({ force = false } = {}) {
-  const failed = [];
-  for (const id of settings.themes) {
-    const c = loadThemeCached(id);
-    if (!force && c && Date.now() - c.fetchedAt < FRESH_MS) continue;
-    try {
-      const res = await fetch(`data/themes/${encodeURIComponent(id)}.json`, { cache: 'no-cache' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      store.set('theme.' + id, { fetchedAt: Date.now(), quotes: sample(data.quotes, MAX_THEME_QUOTES) });
-    } catch (err) {
-      if (!c) failed.push(themeById(id)?.name || id);
-      console.warn(`Theme ${id}:`, err.message);
-    }
-  }
-  setStatus(failed.length ? `Couldn't load themes: ${failed.join(', ')}` : '');
-  return { failed };
-}
-
-async function loadThemeIndex() {
-  const cached = store.get('themeIndex', null);
-  if (cached && Date.now() - cached.at < FRESH_MS) return cached.data;
-  try {
-    const res = await fetch('data/themes/index.json', { cache: 'no-cache' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    store.set('themeIndex', { at: Date.now(), data });
-    return data;
-  } catch {
-    return cached?.data || null;
-  }
-}
-
-const matchesChosenThemes = (text) => themesOf(text).some((t) => settings.themes.includes(t));
-
-/** Can `q` stay as today's thought under the current selection? */
-function stillEligible(q) {
-  if (!q) return false;
-  if (q.discover) return true;
-  if (q.sourceId === OWN_ID) return !!ownSource() && (!themeMode() || matchesChosenThemes(q.text));
-  if (q.sourceId === COLLECTION_ID) return loadCollection().some((x) => x.id === q.id) && (!themeMode() || matchesChosenThemes(q.text));
-  if (themeMode()) return matchesChosenThemes(q.text);
-  return settings.enabled.includes(q.sourceId);
-}
-
-async function renderThemes() {
-  const index = await loadThemeIndex();
-  el.themeGrid.replaceChildren(
-    ...THEMES.map((t) => {
-      const on = settings.themes.includes(t.id);
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'topic';
-      btn.dataset.state = on ? 'all' : 'none';
-      btn.setAttribute('aria-pressed', String(on));
-      btn.innerHTML = '<span class="icon" aria-hidden="true"></span><span class="body"><span class="name"></span><span class="blurb"></span><span class="meta"></span></span>';
-      btn.querySelector('.icon').textContent = t.icon;
-      btn.querySelector('.name').textContent = t.name;
-      btn.querySelector('.blurb').textContent = t.blurb;
-      const info = index?.themes?.[t.id];
-      btn.querySelector('.meta').textContent = info ? `${info.count} thoughts · ${info.authors} authors` : '';
-      btn.addEventListener('click', () => {
-        settings.themes = on ? settings.themes.filter((x) => x !== t.id) : [...settings.themes, t.id];
-        saveSettings();
-        renderThemes();
-        renderEnabledCount();
-      });
-      return btn;
-    })
-  );
-}
-
-function renderMode() {
-  for (const b of el.modeButtons) b.setAttribute('aria-pressed', String(b.dataset.mode === (settings.mode || 'authors')));
-  for (const n of el.modeNotes) n.hidden = n.dataset.for === (settings.mode || 'authors');
-  renderEnabledCount();
 }
 
 // ---------- discovering new authors ----------
-
-const DISCOVER_RATE = 1 / 7; // roughly once a week for a daily reader
 
 function metSources() {
   let met = store.get('met', null);
@@ -988,26 +334,23 @@ function metSources() {
   return met;
 }
 
+/** Note an author as met; true the first time. */
 function meet(sourceId) {
+  if (!sourceId || sourceId === COLLECTION_ID) return false;
   const met = metSources();
-  if (!met.includes(sourceId)) store.set('met', [...met, sourceId]);
+  if (met.includes(sourceId)) return false;
+  store.set('met', [...met, sourceId]);
+  return true;
 }
 
-/** Prepare one never-seen, not-chosen author so a discovery pick is instant. */
 async function prepareDiscovery() {
-  if (themeMode() || !settings.discover || store.get('discover', null)) return;
+  if (store.get('discover', null)) return;
   const met = new Set(metSources());
   const candidates = SOURCES.filter((s) => !settings.enabled.includes(s.id) && !met.has(s.id));
   if (!candidates.length) return;
-  // Favour topics the reader already follows, but allow any.
-  const followed = new Set(settings.enabled.map((id) => findSource(id)?.group));
-  const weights = candidates.map((s) => (followed.has(s.group) ? 2 : 1));
-  let x = Math.random() * weights.reduce((a, b) => a + b, 0);
-  const pick = candidates.find((_, i) => (x -= weights[i]) <= 0) || candidates[0];
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
   try {
-    const res = await fetch(`data/sources/${encodeURIComponent(pick.id)}.json`, { cache: 'no-cache' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const data = await fetchSnapshot(pick.id);
     const quotes = sample(data.quotes, 60).map((q) => ({ ...q, sourceId: pick.id }));
     if (quotes.length) store.set('discover', { id: pick.id, quotes });
   } catch (err) {
@@ -1015,106 +358,331 @@ async function prepareDiscovery() {
   }
 }
 
-function renderDiscover(quote) {
-  const src = quote?.discover ? findSource(quote.sourceId) : null;
-  el.discover.hidden = !src;
-  if (!src) return;
-  const added = settings.enabled.includes(src.id);
-  el.discoverText.textContent = added ? `${src.name} is now one of your sources.` : `A new voice for you: ${src.name} — ${src.blurb}.`;
-  el.discoverAdd.hidden = added;
+// ---------- community (shared ratings) ----------
+
+function deviceId() {
+  let id = store.get('device', null);
+  if (!id) {
+    id = crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => ((Math.random() * 16) | 0).toString(16));
+    store.set('device', id);
+  }
+  return id;
 }
 
-// ---------- ratings & personalisation ----------
+/** Queue a vote; sent now if online, retried on the next open otherwise. */
+function queueVote(quote, r) {
+  if (!communityEnabled() || quote.sourceId === COLLECTION_ID) return;
+  const out = store.get('votesOut', {});
+  out[quote.id] = { quoteId: quote.id, sourceId: quote.sourceId, vote: toVote(r) };
+  store.set('votesOut', out);
+  flushVotes();
+}
 
+let flushing = false;
+async function flushVotes() {
+  if (flushing || !communityEnabled()) return;
+  flushing = true;
+  try {
+    const out = store.get('votesOut', {});
+    for (const [id, v] of Object.entries(out)) {
+      await sendVote(deviceId(), v);
+      const left = store.get('votesOut', {});
+      if (left[id]?.vote === v.vote) delete left[id];
+      store.set('votesOut', left);
+    }
+  } catch (err) {
+    console.warn('Vote sync paused:', err.message);
+  } finally {
+    flushing = false;
+  }
+}
 
-const loadRatings = () => store.get('ratings', {});
-const ratingOf = (quote) => (quote ? loadRatings()[quote.id]?.r || 0 : 0);
-let profileCache = null;
-const tasteProfile = () => (profileCache ||= buildProfile(loadRatings()));
+async function refreshGlobal() {
+  if (!communityEnabled()) return;
+  const cached = store.get('global', null);
+  if (cached && Date.now() - cached.at < GLOBAL_TTL) return;
+  try {
+    store.set('global', { at: Date.now(), data: await fetchScores() });
+    if (current) renderCommunity(current);
+  } catch (err) {
+    console.warn(err.message);
+  }
+}
+
+function renderCommunity(quote) {
+  const entry = globalScores()?.[quote.id];
+  const n = entry ? entry[0] + entry[1] + entry[2] : 0;
+  el.community.hidden = n < 3;
+  if (n < 3) return;
+  const pct = Math.round((entry[0] / n) * 100);
+  el.community.innerHTML = '';
+  const b = document.createElement('b');
+  b.textContent = `${pct}%`;
+  el.community.append(b, ` of ${n} readers found this spoke to them`);
+}
+
+// ---------- journey (streaks, levels, laurels) ----------
+
+const loadJourney = () => ({ ...emptyJourney(), ...store.get('journey', {}) });
+
+/** Apply a change to the journey, award XP, and announce new laurels. */
+function reward(xp, mutate) {
+  const j = loadJourney();
+  const before = levelOf(j.xp).index;
+  mutate?.(j);
+  j.xp += xp;
+  const fresh = checkBadges(j, stats(j, metSources().length), todayKey());
+  store.set('journey', j);
+  const lvl = levelOf(j.xp);
+  if (lvl.index > before) toast(`You are now a ${lvl.name} ✦`);
+  for (const b of fresh) toast(`${b.icon} Laurel earned: ${b.name}`);
+  renderStreak();
+}
+
+function renderStreak() {
+  const j = loadJourney();
+  const today = todayKey();
+  const streak = liveStreak(j, today);
+  el.streakN.textContent = String(streak);
+  el.streakBtn.dataset.cold = String(j.last !== today);
+  el.streakBtn.title = j.last === today ? `${streak}-day streak` : streak ? `Open today's thought to keep your ${streak}-day streak` : 'Start a streak today';
+}
+
+const toastQueue = [];
+function toast(msg) {
+  toastQueue.push(msg);
+  if (toastQueue.length === 1) nextToast();
+}
+function nextToast() {
+  if (!toastQueue.length) return;
+  el.toast.textContent = toastQueue[0];
+  el.toast.hidden = false;
+  el.toast.style.animation = 'none';
+  void el.toast.offsetWidth;
+  el.toast.style.animation = '';
+  setTimeout(() => {
+    toastQueue.shift();
+    el.toast.hidden = true;
+    setTimeout(nextToast, 200);
+  }, 2600);
+}
+
+function renderJourney() {
+  const j = loadJourney();
+  const today = todayKey();
+  const lvl = levelOf(j.xp);
+  el.levelName.textContent = lvl.name;
+  el.levelBar.style.width = `${Math.round(lvl.progress * 100)}%`;
+  el.levelNext.textContent = lvl.next ? `${j.xp} XP · ${lvl.next.xp - j.xp} to ${lvl.next.name}` : `${j.xp} XP · the summit`;
+  const voices = metSources().length;
+  const tiles = [
+    [liveStreak(j, today), 'day streak'],
+    [j.best, 'best streak'],
+    [`${voices}/${SOURCES.length}`, 'voices met'],
+    [j.days.length, 'days read'],
+  ];
+  el.stats.replaceChildren(...tiles.map(([v, label]) => {
+    const d = document.createElement('div');
+    d.className = 'stat';
+    const b = document.createElement('b');
+    b.textContent = v;
+    const s = document.createElement('span');
+    s.textContent = label;
+    d.append(b, s);
+    return d;
+  }));
+  const days = new Set(j.days);
+  const cells = [];
+  for (let i = 27; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const c = document.createElement('i');
+    c.dataset.on = String(days.has(key));
+    c.dataset.today = String(i === 0);
+    c.title = d.toLocaleDateString();
+    cells.push(c);
+  }
+  el.calendar.replaceChildren(...cells);
+  el.badges.replaceChildren(...BADGES.map((b) => {
+    const d = document.createElement('div');
+    d.className = 'badge';
+    d.dataset.locked = String(!j.badges[b.id]);
+    d.innerHTML = '<span class="b-icon"></span><span class="b-name"></span><span class="b-desc"></span>';
+    d.querySelector('.b-icon').textContent = b.icon;
+    d.querySelector('.b-name').textContent = b.name;
+    d.querySelector('.b-desc').textContent = j.badges[b.id] ? `${b.desc} · ${j.badges[b.id]}` : b.desc;
+    return d;
+  }));
+}
+
+// ---------- the seal: a small daily ritual ----------
+
+const visitedToday = () => loadJourney().last === todayKey();
+
+function renderStage() {
+  const sealed = !visitedToday() && !el.welcome.open;
+  el.seal.hidden = !sealed;
+  if (sealed) {
+    el.card.hidden = el.actions.hidden = el.empty.hidden = true;
+    return;
+  }
+  renderQuote();
+}
+
+function breakSeal() {
+  el.seal.classList.add('breaking');
+  setTimeout(() => {
+    el.seal.classList.remove('breaking');
+    let res = {};
+    reward(0, (j) => { res = visit(j, todayKey()); }); // visit() adds the day's XP itself
+    const { gained, broken } = res;
+    const streak = liveStreak(loadJourney(), todayKey());
+    if (gained) toast(broken || streak === 1 ? `Day 1 of a new streak · +${gained} XP` : `Day ${streak} in a row · +${gained} XP`);
+    el.streakBtn.classList.add('bump');
+    setTimeout(() => el.streakBtn.classList.remove('bump'), 700);
+    renderStage();
+  }, 500);
+}
+
+// ---------- rendering the card ----------
+
+function setStatus(msg) {
+  el.status.textContent = msg;
+}
+
+function renderQuote() {
+  if (el.seal && !el.seal.hidden) return;
+  const quote = current;
+  if (!quote) {
+    el.card.hidden = el.actions.hidden = true;
+    el.empty.hidden = false;
+    el.emptyMsg.textContent = settings.themes.length || settings.enabled.length || loadCollection().length
+      ? 'Gathering wisdom…'
+      : 'Choose a theme in the menu to begin.';
+    return;
+  }
+  el.empty.hidden = true;
+  el.card.hidden = el.actions.hidden = false;
+  el.card.style.animation = 'none';
+  void el.card.offsetWidth;
+  el.card.style.animation = '';
+
+  el.text.textContent = quote.text;
+  el.text.classList.toggle('long', quote.text.length > 260);
+  el.source.textContent = nameOf(quote);
+  const href = quote.url || loadCached(quote.sourceId)?.url || (findSource(quote.sourceId) ? `https://en.wikiquote.org/wiki/${encodeURIComponent(findSource(quote.sourceId).title.replace(/ /g, '_'))}` : '');
+  if (href) el.source.href = href;
+  else el.source.removeAttribute('href');
+  el.cite.textContent = [quote.section, quote.cite].filter(Boolean).join(' · ');
+  renderFaces();
+  renderFav();
+  renderDiscover();
+  renderCommunity(quote);
+  renderTranslation(quote);
+}
+
+// Three faces, stored on the 1–5 scale the taste profile uses: 🙁 1, 😐 3, 🙂 5.
+const FACES = [
+  { r: 1, label: 'Not for me', mouth: 'M8 16.5q4-3.5 8 0', emoji: '🙁' },
+  { r: 3, label: "It's okay", mouth: 'M8.5 15.5h7', emoji: '😐' },
+  { r: 5, label: 'This spoke to me', mouth: 'M8 14q4 4 8 0', emoji: '🙂' },
+];
+const faceOf = (r) => (!r ? null : r <= 2 ? FACES[0] : r === 3 ? FACES[1] : FACES[2]);
+const ratingOf = (q) => (q ? loadRatings()[q.id]?.r || 0 : 0);
 
 function setRating(quote, r) {
   const ratings = loadRatings();
+  const first = !ratings[quote.id];
   if (!r) delete ratings[quote.id];
   else ratings[quote.id] = { r, sourceId: quote.sourceId, text: quote.text, at: Date.now() };
   store.set('ratings', ratings);
   profileCache = null;
+  if (r && first) reward(XP.vote, (j) => { j.votes++; });
+  queueVote(quote, r);
 }
 
-// Three faces. Stored on the same 1–5 scale the taste profile uses
-// (older 5-star ratings keep working): 🙁 = 1, 😐 = 3, 🙂 = 5.
-const FACES = [
-  { r: 1, label: 'Not for me', mouth: 'M8 16.5q4-3.5 8 0' },
-  { r: 3, label: "It's okay", mouth: 'M8.5 15.5h7' },
-  { r: 5, label: 'Spoke to me', mouth: 'M8 14q4 4 8 0' },
-];
-const faceOf = (r) => (!r ? null : r <= 2 ? FACES[0] : r === 3 ? FACES[1] : FACES[2]);
-const faceSvg = (f) =>
-  `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle class="eye" cx="9" cy="10" r="1.1"/><circle class="eye" cx="15" cy="10" r="1.1"/><path d="${f.mouth}"/></svg>`;
-
-function renderStars(quote) {
-  const chosen = faceOf(ratingOf(quote));
-  el.stars.replaceChildren(
-    ...FACES.map((f) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'face';
-      b.innerHTML = faceSvg(f);
-      b.setAttribute('role', 'radio');
-      b.setAttribute('aria-checked', String(f === chosen));
-      b.setAttribute('aria-label', f.label);
-      b.title = f.label;
-      b.addEventListener('click', () => {
-        if (!current) return;
-        setRating(current, f === faceOf(ratingOf(current)) ? 0 : f.r); // tap the same face again to clear
-        renderStars(current);
-        renderLists();
-      });
-      return b;
-    })
-  );
-  el.rateLabel.textContent = chosen ? chosen.label : 'How did this speak to you?';
-}
-
-function renderTaste() {
-  el.tasteOn.checked = settings.taste;
-  const profile = tasteProfile();
-  if (profile.n < MIN_RATINGS) {
-    el.tasteSummary.textContent = `Rate a few thoughts with the stars under each one — after ${MIN_RATINGS} ratings the daily pick starts leaning towards what speaks to you (${profile.n} so far).`;
-    el.tasteReset.hidden = profile.n === 0;
-    return;
-  }
-  el.tasteReset.hidden = false;
-  const s = summarize(profile, (id) => findSource(id)?.name || (id === COLLECTION_ID ? 'My collection' : id));
-  const parts = [`${profile.n} ratings.`];
-  if (s.liked.length) parts.push(`More often: ${s.liked.map((x) => x.name).join(', ')}.`);
-  if (s.disliked.length) parts.push(`Less often: ${s.disliked.map((x) => x.name).join(', ')}.`);
-  if (s.themes.length) parts.push(`Themes you like: ${s.themes.join(', ')}.`);
-  parts.push('One pick in five stays random, so you keep discovering new voices.');
-  el.tasteSummary.textContent = parts.join(' ');
-}
-
-function bindTaste() {
-  el.tasteOn.addEventListener('change', () => {
-    settings.taste = el.tasteOn.checked;
-    saveSettings();
-  });
-  el.tasteReset.addEventListener('click', () => {
-    if (!confirm('Clear all your ratings? The daily pick goes back to fully random.')) return;
-    store.set('ratings', {});
-    profileCache = null;
-    renderTaste();
-    renderStars(current);
-    renderLists();
-  });
+function renderFaces() {
+  const chosen = faceOf(ratingOf(current));
+  el.faces.replaceChildren(...FACES.map((f) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'face';
+    b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle class="eye" cx="9" cy="10" r="1.1"/><circle class="eye" cx="15" cy="10" r="1.1"/><path d="${f.mouth}"/></svg>`;
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(f === chosen));
+    b.setAttribute('aria-label', f.label);
+    b.title = f.label;
+    b.addEventListener('click', () => {
+      if (!current) return;
+      setRating(current, f === faceOf(ratingOf(current)) ? 0 : f.r);
+      renderFaces();
+      el.faces.children[FACES.indexOf(f)]?.classList.add('pop');
+      renderLists();
+    });
+    return b;
+  }));
+  el.rateLabel.textContent = chosen ? chosen.label : 'Did this speak to you?';
 }
 
 const isFav = (q) => store.get('favs', []).some((f) => f.id === q.id);
 
-function renderFavButton() {
+function renderFav() {
   const on = current && isFav(current);
   el.fav.setAttribute('aria-pressed', String(!!on));
-  el.fav.textContent = on ? '★ Saved' : '☆ Save';
+  el.fav.textContent = on ? '♥ Saved' : '♡ Save';
 }
+
+function renderDiscover() {
+  const src = current?.discover ? findSource(current.sourceId) : null;
+  el.discover.hidden = !src;
+  if (!src) return;
+  const followed = settings.enabled.includes(src.id);
+  el.discoverText.textContent = followed ? `You now follow ${src.name}.` : `A new voice for you: ${src.name} — ${src.blurb}.`;
+  el.discoverAdd.hidden = followed;
+}
+
+// ---------- translation ----------
+
+let translationSeq = 0;
+const cachedTranslation = (q, lang) => store.get('tr', {})[`${lang}:${q.id}`] || '';
+
+function rememberTranslation(q, lang, text) {
+  const cache = store.get('tr', {});
+  cache[`${lang}:${q.id}`] = text;
+  const keys = Object.keys(cache);
+  for (const k of keys.slice(0, Math.max(0, keys.length - MAX_TRANSLATIONS))) delete cache[k];
+  store.set('tr', cache);
+}
+
+async function renderTranslation(quote) {
+  const lang = settings.lang;
+  const seq = ++translationSeq;
+  el.translation.hidden = !lang;
+  if (!lang) return;
+  el.translation.setAttribute('lang', lang);
+  const shown = (text) => {
+    el.translation.textContent = text;
+    el.translation.classList.remove('pending');
+    if (!loadJourney().translated) reward(0, (j) => { j.translated = 1; });
+  };
+  const hit = cachedTranslation(quote, lang);
+  if (hit) return shown(hit);
+  el.translation.textContent = '…';
+  el.translation.classList.add('pending');
+  try {
+    const text = await translate(quote.text, lang);
+    if (seq !== translationSeq) return;
+    rememberTranslation(quote, lang, text);
+    shown(text);
+  } catch {
+    if (seq !== translationSeq) return;
+    el.translation.textContent = `(translation into ${languageName(lang)} unavailable right now)`;
+    el.translation.classList.remove('pending');
+  }
+}
+
+// ---------- library ----------
 
 function quoteItem(q, meta, onRemove) {
   const li = document.createElement('li');
@@ -1139,188 +707,453 @@ function quoteItem(q, meta, onRemove) {
 }
 
 function renderLists() {
-  const favs = store.get('favs', []);
-  el.favList.replaceChildren(
-    ...favs.map((q) =>
-      quoteItem(q, findSource(q.sourceId)?.name || q.source, () => {
-        store.set('favs', store.get('favs', []).filter((f) => f.id !== q.id));
-        renderLists();
-        renderFavButton();
-      })
-    )
-  );
+  el.favList.replaceChildren(...store.get('favs', []).map((q) =>
+    quoteItem(q, nameOf(q), () => {
+      store.set('favs', store.get('favs', []).filter((f) => f.id !== q.id));
+      renderLists();
+      renderFav();
+    })
+  ));
   const history = store.get('history', []).filter((h) => h.date !== todayKey());
-  el.historyList.replaceChildren(...history.map((h) => { const r = ratingOf(h.quote); return quoteItem(h.quote, `${h.date} · ${findSource(h.quote.sourceId)?.name || h.quote.source}${r ? ` · ${["🙁", "😐", "🙂"][FACES.indexOf(faceOf(r))]}` : ""}`); }));
+  el.historyList.replaceChildren(...history.map((h) => {
+    const f = faceOf(ratingOf(h.quote));
+    return quoteItem(h.quote, `${h.date} · ${nameOf(h.quote)}${f ? ` · ${f.emoji}` : ''}`);
+  }));
 }
 
+// ---------- settings: themes ----------
 
-function renderDataStatus() {
-  let quotes = 0;
-  let oldest = Infinity;
-  let n = 0;
-  for (const id of settings.enabled) {
-    const c = loadCached(id);
-    if (!c) continue;
-    n++;
-    quotes += c.quotes.length;
-    oldest = Math.min(oldest, c.fetchedAt);
+function themeCard(t, onToggle) {
+  const on = settings.themes.includes(t.id);
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'theme';
+  b.setAttribute('aria-pressed', String(on));
+  b.title = t.blurb;
+  b.innerHTML = '<span class="icon" aria-hidden="true"></span><span class="name"></span>';
+  b.querySelector('.icon').textContent = t.icon;
+  b.querySelector('.name').textContent = t.name;
+  b.addEventListener('click', () => {
+    settings.themes = on ? settings.themes.filter((x) => x !== t.id) : [...settings.themes, t.id];
+    saveSettings();
+    onToggle();
+  });
+  return b;
+}
+
+function renderThemeGrid() {
+  el.themeGrid.replaceChildren(...THEMES.map((t) => themeCard(t, renderThemeGrid)));
+}
+
+function renderWelcome() {
+  el.welcomeThemes.replaceChildren(...THEMES.map((t) => themeCard(t, renderWelcome)));
+  el.welcomeGo.disabled = !settings.themes.length;
+  el.welcomeGo.textContent = settings.themes.length ? 'Begin' : 'Choose at least one';
+}
+
+// ---------- settings: authors ----------
+
+async function ensureThumbs(sources) {
+  const thumbs = store.get('thumbs', {});
+  const todo = sources.filter((s) => !thumbs[s.id] || Date.now() - thumbs[s.id].at > THUMB_TTL);
+  if (!todo.length) return false;
+  for (let i = 0; i < todo.length; i += 50) {
+    const batch = todo.slice(i, i + 50);
+    const params = new URLSearchParams({
+      action: 'query', prop: 'pageimages', piprop: 'thumbnail', pithumbsize: '96', redirects: '1',
+      format: 'json', formatversion: '2', origin: '*', titles: batch.map((s) => s.title).join('|'),
+    });
+    try {
+      const q = (await (await fetch(`https://en.wikipedia.org/w/api.php?${params}`)).json()).query || {};
+      const alias = new Map([...(q.normalized || []), ...(q.redirects || [])].map((r) => [r.from, r.to]));
+      const resolve = (t) => { for (let n = 0; n < 5 && alias.has(t); n++) t = alias.get(t); return t; };
+      const byTitle = new Map((q.pages || []).map((p) => [p.title, p]));
+      for (const s of batch) thumbs[s.id] = { url: byTitle.get(resolve(s.title))?.thumbnail?.source || '', at: Date.now() };
+    } catch {
+      return false;
+    }
   }
-  const when = n ? `last fetched ${new Date(oldest).toLocaleDateString()}` : 'nothing fetched yet';
-  el.dataStatus.textContent = `${n} sources cached · ${quotes} quotes · ${when}`;
+  store.set('thumbs', thumbs);
+  return true;
 }
 
-function setEnabled(id, on) {
+const initials = (name) => name.split(/\s+/).filter((w) => /^[A-Za-zÀ-ž]/.test(w)).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+
+function avatarEl(src, thumbs) {
+  const wrap = document.createElement('span');
+  wrap.className = 'avatar';
+  const url = thumbs[src.id]?.url;
+  if (url) {
+    const img = document.createElement('img');
+    Object.assign(img, { src: url, alt: '', loading: 'lazy', decoding: 'async', referrerPolicy: 'no-referrer' });
+    img.addEventListener('error', () => { img.remove(); wrap.textContent = initials(src.name); });
+    wrap.append(img);
+  } else {
+    wrap.textContent = initials(src.name);
+  }
+  return wrap;
+}
+
+function setFollowed(id, on) {
   const has = settings.enabled.includes(id);
   if (on && !has) settings.enabled.push(id);
   if (!on && has) settings.enabled = settings.enabled.filter((x) => x !== id);
   saveSettings();
+  renderFollowCount();
 }
 
-// ---------- events ----------
+function renderFollowCount() {
+  const n = settings.enabled.length;
+  el.followCount.textContent = n ? `${n} followed` : 'none';
+}
+
+function renderAuthors() {
+  const thumbs = store.get('thumbs', {});
+  const topics = [...TOPICS, ...(settings.customs.length ? [CUSTOM_TOPIC] : [])];
+  el.groups.replaceChildren(...topics.map((topic) => {
+    const items = allSources().filter((s) => s.group === topic.name);
+    const wrap = document.createElement('div');
+    wrap.className = 'group';
+    const h = document.createElement('h4');
+    h.textContent = `${topic.icon} ${topic.name}`;
+    const tools = document.createElement('span');
+    tools.className = 'group-tools';
+    for (const [label, on] of [['all', true], ['none', false]]) {
+      const a = document.createElement('a');
+      a.textContent = label;
+      a.addEventListener('click', () => { for (const s of items) setFollowed(s.id, on); renderAuthors(); });
+      tools.append(a);
+    }
+    h.append(tools);
+    const grid = document.createElement('div');
+    grid.className = 'people';
+    for (const s of items) {
+      const label = document.createElement('label');
+      label.className = 'person';
+      label.title = s.blurb || '';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = settings.enabled.includes(s.id);
+      input.addEventListener('change', () => setFollowed(s.id, input.checked));
+      const text = document.createElement('span');
+      text.className = 'text';
+      text.innerHTML = '<span class="name"></span><span class="blurb"></span>';
+      text.querySelector('.name').textContent = s.name;
+      text.querySelector('.blurb').textContent = s.blurb || '';
+      label.append(input, avatarEl(s, thumbs), text);
+      grid.append(label);
+    }
+    wrap.append(h, grid);
+    return wrap;
+  }));
+  renderFollowCount();
+}
+
+// ---------- settings: translation ----------
+
+function renderLanguages() {
+  const options = LANGUAGES.map((code) => ({ code, native: languageName(code, code) })).sort((a, b) => a.native.localeCompare(b.native));
+  const card = ({ code, native }, art) => {
+    const label = document.createElement('label');
+    label.className = 'flag';
+    const input = document.createElement('input');
+    Object.assign(input, { type: 'radio', name: 'lang', value: code, checked: settings.lang === code });
+    input.addEventListener('change', () => {
+      settings.lang = code;
+      saveSettings();
+      el.langCurrent.textContent = code ? languageName(code) : 'off';
+      if (current) renderTranslation(current);
+    });
+    const a = document.createElement('span');
+    a.className = 'art';
+    a.innerHTML = art; // trusted: our own SVG module
+    const n = document.createElement('span');
+    n.className = 'native';
+    n.textContent = native;
+    label.append(input, a, n);
+    return label;
+  };
+  el.flagGrid.replaceChildren(
+    card({ code: '', native: 'None' }, '<span class="none" aria-hidden="true">—</span>'),
+    ...options.map((o) => card(o, flagSvg(o.code)))
+  );
+  el.langCurrent.textContent = settings.lang ? languageName(settings.lang) : 'off';
+}
+
+// ---------- settings: daily reminder (Web Push) ----------
+
+const timeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+const hh = (h) => `${String(h).padStart(2, '0')}:00`;
+
+async function renderReminder() {
+  const supported = pushSupported() && location.protocol !== 'file:';
+  el.pushUnsupported.hidden = supported;
+  el.pushControls.hidden = !supported;
+  if (!supported) {
+    el.pushUnsupported.textContent = isIos() && !isStandalone()
+      ? 'On iPhone and iPad, reminders work once the app is on your Home Screen: Share → "Add to Home Screen".'
+      : 'This browser does not support notifications.';
+    el.pushCurrent.textContent = '';
+    return;
+  }
+  if (!el.pushHour.options.length) for (let h = 0; h < 24; h++) el.pushHour.append(new Option(hh(h), h));
+  el.pushHour.value = settings.pushHour;
+  let sub = null;
+  let swError = '';
+  try { sub = await currentSubscription(); } catch (err) { swError = err.message; }
+  el.pushEnable.hidden = !!sub;
+  el.pushTest.hidden = el.pushDisable.hidden = el.pushSetup.hidden = !sub;
+  el.pushCurrent.textContent = sub ? hh(settings.pushHour) : 'off';
+  if (sub) {
+    el.pushStatus.textContent = Notification.permission === 'granted'
+      ? `On — one thought a day at ${hh(settings.pushHour)} (${timeZone()}).`
+      : 'Notifications are blocked in the browser settings for this site.';
+    el.pushConfig.value = JSON.stringify(buildConfig({ subscription: sub, sources: settings.enabled, themes: settings.themes, mode: 'mixed', lang: settings.lang, hour: settings.pushHour, timeZone: timeZone() }));
+  } else {
+    el.pushStatus.textContent = swError ? `Not available here: ${swError}` : Notification.permission === 'denied' ? 'Notifications are blocked for this site.' : '';
+    el.pushConfig.value = '';
+  }
+}
+
+async function adoptPushedQuote() {
+  const p = await readLatestPush();
+  const date = todayKey();
+  if (!p?.quote || p.date !== date || store.get('pushAdopted', '') === date) return false;
+  store.set('pushAdopted', date);
+  const quote = { ...p.quote };
+  if (p.translation && p.lang) rememberTranslation(quote, p.lang, p.translation);
+  adopt(quote, date);
+  renderQuote();
+  renderLists();
+  return true;
+}
+
+// ---------- settings: own passages ----------
+
+function renderPassages() {
+  const items = loadCollection();
+  el.colCount.textContent = items.length ? String(items.length) : '';
+  el.colList.replaceChildren(...items.map((q) =>
+    quoteItem(q, q.source, () => {
+      store.set('collection', loadCollection().filter((x) => x.id !== q.id));
+      renderPassages();
+    })
+  ));
+  el.colBookmarklet.href = bookmarklet(APP_URL);
+}
+
+const SHARE_HINTS = {
+  selection: '',
+  fragment: 'Taken from the highlight in the shared link.',
+  partial: 'The link only holds the start and end of your selection — paste the full text to replace the “…”.',
+  page: 'Only the page link was shared. In Chrome, select the text and tap Share in the pop-up next to it — or copy it and tap Paste.',
+};
+
+function openShareDialog(shared = {}) {
+  const p = parseShared(shared);
+  el.shareText.value = p.text;
+  el.shareFrom.value = p.attribution;
+  el.shareUrl.value = p.url;
+  el.shareHint.textContent = SHARE_HINTS[p.kind] || '';
+  el.shareDialog.returnValue = '';
+  el.shareDialog.showModal();
+  el.shareText.focus();
+}
+
+function consumeShareParams() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has('share') && !params.has('text')) return;
+  history.replaceState(null, '', location.pathname);
+  openShareDialog({ title: params.get('title') || '', text: params.get('text') || '', url: params.get('url') || '' });
+}
+
+// ---------- dialogs ----------
+
+async function openSettings() {
+  renderThemeGrid();
+  renderFollowCount();
+  renderLanguages();
+  renderReminder();
+  renderPassages();
+  el.communityNote.textContent = communityEnabled()
+    ? 'Your ratings are shared anonymously with every reader, and theirs help choose your thoughts.'
+    : '';
+  el.settings.showModal();
+}
+
+async function applySelection() {
+  await Promise.all([ensureThemes(), ensureSources({ onLoaded: () => { if (!current) showToday(); } })]);
+  if (!stillEligible(current)) showToday({ replace: true });
+  prepareDiscovery();
+}
 
 function bind() {
-  el.openSources.addEventListener('click', () => openSettings());
-  el.emptyAction.addEventListener('click', () => openSettings('topics'));
-  for (const tab of el.tabs) tab.addEventListener('click', () => showTab(tab.dataset.tab));
-  bindNotifications();
-  bindCollection();
-  bindTaste();
-  for (const b of el.modeButtons) {
-    b.addEventListener('click', () => {
-      settings.mode = b.dataset.mode;
-      saveSettings();
-      renderMode();
-      showTab(themeMode() ? 'themes' : 'topics');
-    });
-  }
-  el.discoverOn.addEventListener('change', () => {
-    settings.discover = el.discoverOn.checked;
-    saveSettings();
-    if (!settings.discover) store.remove('discover');
-  });
-  el.discoverAdd.addEventListener('click', async () => {
-    if (!current?.discover) return;
-    setEnabled(current.sourceId, true);
-    renderDiscover(current);
-    await ensureSources();
-  });
-
-  el.dialog.addEventListener('close', async () => {
-    settings.ownLines = el.ownLines.value;
-    saveSettings();
-    const { failed } = themeMode()
-      ? await ensureThemes()
-      : await ensureSources({ onLoaded: () => { if (!current) showToday(); } });
-    // If today's pick no longer fits the selection (source or theme removed), choose again.
-    if (!stillEligible(current)) showToday({ replace: true });
-    if (failed.length && !themeMode()) renderSources();
-    prepareDiscovery();
-  });
-
-  el.addCustom.addEventListener('click', async () => {
-    const title = el.customTitle.value.trim();
-    if (!title) return;
-    const src = customSource(title);
-    if (allSources().some((s) => s.id === src.id)) {
-      el.customHint.textContent = 'Already in your list.';
-      return;
-    }
-    el.customHint.textContent = `Looking up “${title}” on Wikiquote…`;
-    el.addCustom.disabled = true;
-    try {
-      const data = await refreshSource(src);
-      src.name = data.title;
-      settings.customs.push(src);
-      setEnabled(src.id, true);
-      el.customTitle.value = '';
-      el.customHint.textContent = `Added ${data.title} (${data.quotes.length} quotes).`;
-      renderSources();
-      renderTopics();
-      ensureThumbs([src]).then((changed) => { if (changed && el.dialog.open) renderSources(); });
-    } catch (err) {
-      el.customHint.textContent = `Couldn't find a usable Wikiquote page for “${title}”. (${err.message})`;
-    } finally {
-      el.addCustom.disabled = false;
-    }
-  });
-  el.customTitle.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      el.addCustom.click();
-    }
-  });
-
+  el.seal.addEventListener('click', breakSeal);
+  el.settingsOpen.addEventListener('click', openSettings);
+  el.streakBtn.addEventListener('click', () => { renderJourney(); el.journey.showModal(); });
   el.another.addEventListener('click', () => showToday({ replace: true }));
-
-  el.copy.addEventListener('click', async () => {
-    if (!current) return;
-    const who = findSource(current.sourceId)?.name || current.source;
-    try {
-      const translated = settings.lang ? cachedTranslation(current, settings.lang) : '';
-      await navigator.clipboard.writeText(`“${current.text}” — ${who}` + (translated ? `\n\n${translated}` : ''));
-      setStatus('Copied.');
-      setTimeout(() => setStatus(''), 1500);
-    } catch {
-      setStatus('Copy failed — select the text manually.');
-    }
-  });
 
   el.fav.addEventListener('click', () => {
     if (!current) return;
     const favs = store.get('favs', []);
-    store.set('favs', isFav(current) ? favs.filter((f) => f.id !== current.id) : [current, ...favs]);
-    renderFavButton();
+    const adding = !isFav(current);
+    store.set('favs', adding ? [current, ...favs] : favs.filter((f) => f.id !== current.id));
+    if (adding) reward(XP.save, (j) => { j.saves++; });
+    renderFav();
     renderLists();
   });
 
-  el.refreshAll.addEventListener('click', async () => {
-    el.refreshAll.disabled = true;
-    el.dataStatus.textContent = 'Refreshing…';
-    await ensureSources({ force: true });
-    renderSources();
-    el.refreshAll.disabled = false;
+  el.share.addEventListener('click', async () => {
+    if (!current) return;
+    const tr = settings.lang ? cachedTranslation(current, settings.lang) : '';
+    const text = `“${current.text}”\n— ${nameOf(current)}` + (tr ? `\n\n${tr}` : '');
+    try {
+      if (navigator.share) await navigator.share({ text });
+      else {
+        await navigator.clipboard.writeText(text);
+        toast('Copied — ready to paste');
+      }
+    } catch { /* share sheet dismissed */ }
   });
 
-  el.resetSeen.addEventListener('click', () => {
-    store.set('seen', []);
-    el.dataStatus.textContent = 'Seen list cleared — quotes may repeat now.';
+  el.discoverAdd.addEventListener('click', async () => {
+    if (!current?.discover) return;
+    setFollowed(current.sourceId, true);
+    renderDiscover();
+    toast(`You now follow ${nameOf(current)}`);
+    await ensureSources();
   });
 
-  el.resetAll.addEventListener('click', () => {
-    if (!confirm('Remove all cached quotes, settings, history and favourites?')) return;
-    for (const k of store.keys('')) store.remove(k);
+  // Welcome: first launch.
+  el.welcome.addEventListener('close', async () => {
+    renderStage();
+    await applySelection();
+  });
+
+  el.settings.addEventListener('close', applySelection);
+  el.authorsSection.addEventListener('toggle', async () => {
+    if (!el.authorsSection.open) return;
+    renderAuthors();
+    if (await ensureThumbs(allSources())) renderAuthors();
+  });
+
+  // Reminder
+  el.pushHour.addEventListener('change', () => { settings.pushHour = Number(el.pushHour.value); saveSettings(); renderReminder(); });
+  el.pushEnable.addEventListener('click', async () => {
+    el.pushEnable.disabled = true;
+    try { await subscribe(); } catch (err) { el.pushStatus.textContent = `Could not turn on: ${err.message}`; }
+    el.pushEnable.disabled = false;
+    renderReminder();
+  });
+  el.pushDisable.addEventListener('click', async () => { try { await unsubscribe(); } catch { /* ignore */ } renderReminder(); });
+  el.pushTest.addEventListener('click', async () => {
+    try {
+      await showLocalNotification('Thought for today', { body: current ? `“${current.text}” — ${nameOf(current)}` : 'Your daily thought.', icon: 'icon.svg', tag: 'daily-thought-test' });
+    } catch (err) { el.pushStatus.textContent = err.message; }
+  });
+  el.pushCopy.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(el.pushConfig.value); el.pushCopy.textContent = 'Copied ✓'; } catch { el.pushConfig.select(); }
+    setTimeout(() => { el.pushCopy.textContent = 'Copy configuration'; }, 1500);
+  });
+
+  // Own passages
+  el.colAdd.addEventListener('click', () => openShareDialog());
+  el.sharePaste.addEventListener('click', async () => {
+    try {
+      const clip = (await navigator.clipboard.readText()).trim();
+      if (!clip) throw new Error('empty');
+      el.shareText.value = parseShared({ text: clip }).text || clip;
+      el.shareHint.textContent = '';
+    } catch {
+      el.shareHint.textContent = 'Could not read the clipboard — long-press the box and choose Paste.';
+    }
+  });
+  el.shareDialog.addEventListener('close', () => {
+    const action = el.shareDialog.returnValue;
+    if (action !== 'save' && action !== 'show') return;
+    const entry = { text: el.shareText.value.trim(), attribution: el.shareFrom.value.trim(), url: el.shareUrl.value };
+    const added = addToCollection([entry]);
+    const quote = loadCollection().find((q) => q.id === collectionQuote(entry).id);
+    if (action === 'show' && quote) {
+      if (!visitedToday()) breakSeal();
+      adopt(quote);
+      renderQuote();
+      renderLists();
+    }
+    toast(added ? 'Added to your passages' : 'Already in your passages');
+    if (el.settings.open) renderPassages();
+  });
+  el.colFile.addEventListener('change', async () => {
+    const file = el.colFile.files[0];
+    if (!file) return;
+    try {
+      const entries = parseClippings(await file.text());
+      const added = addToCollection(entries);
+      el.colStatus.textContent = entries.length ? `Imported ${added} new highlight${added === 1 ? '' : 's'}.` : 'No highlights found — is this a Kindle "My Clippings.txt"?';
+      renderPassages();
+    } catch (err) {
+      el.colStatus.textContent = `Import failed: ${err.message}`;
+    } finally {
+      el.colFile.value = '';
+    }
+  });
+
+  el.resetAll.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (!confirm('Start over? This removes your themes, ratings, streak, saved thoughts and passages on this device.')) return;
+    for (const k of store.keys()) store.remove(k);
     location.reload();
   });
 
-  // New day while the tab stays open (e.g. installed on a phone).
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
-    if (store.get('today', {}).date !== todayKey()) {
-      el.date.textContent = formatDate();
-      showToday();
-    }
+    renderDate();
+    renderStreak();
+    if (store.get('today', {}).date !== todayKey()) showToday();
+    renderStage();
     adoptPushedQuote();
+    flushVotes();
   });
+  window.addEventListener('online', flushVotes);
 }
 
-const formatDate = () => new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+function renderDate() {
+  const d = new Date();
+  const weekday = d.toLocaleDateString('en-GB', { weekday: 'long' });
+  el.date.textContent = `${weekday} · ${roman(d.getDate())} · ${roman(d.getMonth() + 1)} · ${roman(d.getFullYear())}`;
+  el.date.title = d.toLocaleDateString(undefined, { dateStyle: 'full' });
+}
 
 // ---------- boot ----------
 
 async function init() {
-  el.date.textContent = formatDate();
+  // One-time migration: "my own lines" became passages.
+  if (settings.ownLines) {
+    addToCollection(settings.ownLines.split('\n').map((t) => ({ text: t.trim() })).filter((e) => e.text.length > 3));
+    delete settings.ownLines;
+  }
+  saveSettings();
+
+  renderDate();
+  renderStreak();
   bind();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch((err) => console.warn('SW registration failed', err));
   }
-  showToday(); // instant if anything is cached
-  consumeShareParams();
+
+  const needsWelcome = firstRun || (!settings.themes.length && !settings.enabled.length && !loadCollection().length);
+  if (needsWelcome) {
+    renderWelcome();
+    el.welcome.showModal();
+  }
+  showToday();
+  renderStage();
   renderLists();
-  await adoptPushedQuote(); // a push received today wins over the local pick
-  if (themeMode()) await ensureThemes();
-  else await ensureSources({ onLoaded: () => { if (!current) showToday(); } });
-  if (!current) showToday();
-  prepareDiscovery();
+  consumeShareParams();
+  await adoptPushedQuote();
+  if (!needsWelcome) await applySelection();
+  flushVotes();
+  refreshGlobal();
 }
 
 init();

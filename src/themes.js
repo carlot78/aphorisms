@@ -21,7 +21,7 @@ export const THEMES = [
     re: /\b(wisdom|wise\w*|knowledge|know(ing)? thyself|learn\w*|ignoran\w*|truths?|understand\w*|stud(y|ies|ying)|teach\w*|philosoph\w*|reason)\b/i },
   { id: 'discipline', icon: '🎯', name: 'Habits & discipline', blurb: 'Practice, effort, patience and self-mastery',
     re: /\b(habits?|discipline\w*|practi[cs]e[sd]?|practi[cs]ing|efforts?|patien(ce|t)|persist\w*|self-control|self-discipline|master(y| of himself| of yourself| of oneself)|diligen\w*|routines?|hard work|daily|every day|perseverance)\b/i },
-  { id: 'self', icon: '🪞', name: 'Being yourself', blurb: 'Character, authenticity, conscience and the soul',
+  { id: 'self', icon: '🎭', name: 'Being yourself', blurb: 'Character, authenticity, conscience and the soul',
     re: /\b(yourself|himself|thyself|character|soul|authentic\w*|conscience|integrity|virtue\w*|self-reliance|individual\w*|nature of man|own nature)\b/i },
   { id: 'simplicity', icon: '🍃', name: 'Simplicity & nature', blurb: 'Wanting less, wealth and poverty, the natural world',
     re: /\b(simpl(e|icity|y)|nature|natural|wealth\w*|rich(es)?|poor|poverty|possessions?|luxur\w*|frugal\w*|enough|needs?|money|woods?|trees?)\b/i },

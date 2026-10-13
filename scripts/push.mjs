@@ -20,6 +20,8 @@ import { SOURCES } from '../src/sources.js';
 import { hash } from '../src/wikiquote.js';
 import { translate } from '../src/translate.js';
 import { VAPID_PUBLIC_KEY, PUSH_SUBJECT } from '../src/push-config.js';
+import { pickPersonal } from '../src/taste.js';
+import { communityEnabled, fetchScores } from '../src/community.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -67,13 +69,17 @@ async function main() {
     return;
   }
 
-  const buckets = config.mode === 'themes' && config.themes?.length
-    ? await loadPool(config.themes, 'themes') // theme files already carry each quote's author
-    : await loadPool(config.sources || []);
+  // Themes and followed authors together, like the app (theme files already
+  // carry each quote's author).
+  const buckets = [...(await loadPool(config.themes || [], 'themes')), ...(await loadPool(config.sources || []))];
   if (!buckets.length) throw new Error('No snapshot quotes for the configured sources.');
   const rng = mulberry32(parseInt(hash(`${day}|push`), 16));
-  const bucket = buckets[Math.floor(rng() * buckets.length)];
-  const quote = bucket[Math.floor(rng() * bucket.length)];
+  // Community votes (when the shared database is configured) tilt the pick.
+  let global = null;
+  if (communityEnabled()) {
+    try { global = await fetchScores(); } catch (err) { console.warn(err.message); }
+  }
+  const quote = pickPersonal(buckets, null, rng, { global });
   const who = SOURCES.find((s) => s.id === quote.sourceId)?.name || quote.source;
 
   let translation = '';

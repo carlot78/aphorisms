@@ -9,42 +9,45 @@ maintaining a quote list.
 
 ## How it works
 
-- **Sources** — a curated catalog of ~80 authors and books in 8 topics (Stoics,
-  Eastern wisdom, philosophers, psychologists, modern self-improvement
-  writers…). Pick whole topics at once, or individual people (with their
-  portraits); add any other Wikiquote page by title; or paste your own lines.
-- **Autonomous retrieval** — the browser calls the Wikiquote API directly,
-  parses the quote lists, and caches them locally for a week. A GitHub Action
-  ([`refresh-quotes.yml`](.github/workflows/refresh-quotes.yml)) also runs
-  weekly and commits a snapshot under `data/` that the app falls back to when
-  Wikiquote is unreachable.
-- **One per day** — the day's pick is chosen from your enabled sources with an
-  equal chance per source (so a 1000-quote page doesn't drown a 50-quote one),
-  never repeats until everything has been shown, and stays put for the whole
-  day. "Another" swaps it if it doesn't land.
-- **Translation** — optionally show the day's thought in a second language
-  (24 languages), always alongside the English original. Uses the browser's
-  built-in on-device translator when available, otherwise the free MyMemory
-  API with Google Translate as a fallback. Translations are cached locally.
+- **Choose what inspires you** — on first launch you pick a few themes
+  (resilience, calm mind, death & time, habits, happiness…). Each day you get
+  one thought on them, from every author in the catalogue. You can also follow
+  specific authors, and add passages of your own.
+- **A daily ritual** — today's thought waits under a wax seal. Breaking it
+  keeps your **streak** going; ratings, saves and new authors earn XP towards
+  seven levels (Novice → Oracle) and twelve laurels. Tap the 🔥 to see your
+  journey.
+- **It learns your taste** — rate each thought 🙁 😐 🙂. Your ratings, and —
+  when the community database is configured — everyone's, tilt future picks
+  towards what speaks to you. One pick in five stays random, and about once a
+  week a completely new author is introduced.
+- **Autonomous retrieval** — quotes come from Wikiquote, live in the browser
+  and from a weekly snapshot committed by a GitHub Action
+  ([`refresh-quotes.yml`](.github/workflows/refresh-quotes.yml)), which also
+  rebuilds the theme index.
+- **Translation** — optionally show each thought in a second language too.
 - **Send text from other apps** — share a passage from Chrome, Kindle, a PDF
-  reader… to Aphorisms (Android share sheet once installed; bookmarklet on
-  desktop; Shortcut on iPhone), or import Kindle `My Clippings.txt`. Saved
-  passages join the daily rotation as *My collection*.
-- **Ratings that learn your taste** — rate each thought 🙁 😐 🙂; after a
-  few ratings the daily pick leans towards the sources and themes you rate
-  highly (one pick in five stays random). See and reset what it learned in
-  Settings → Topics.
-- **New voices** — about once a week the app introduces an author you haven't
-  chosen and never seen, with a one-tap "Add to my sources".
-- **Choose by themes** — instead of authors, pick subjects (resilience, death
-  and time, habits, happiness…) and read what every author in the catalogue
-  says about them. The theme index is rebuilt weekly by the same Action.
-- **Push notifications** — optional daily notification with the day's thought
-  (and its translation), sent by a GitHub Action; see below.
-- **Installable & offline** — it's a PWA. On a phone, "Add to Home Screen";
-  the shell and your cached quotes work without a connection.
-- **Private** — everything (selection, history, favourites, own lines) lives
-  in your browser's localStorage. No account, no tracking, no backend.
+  reader… (Android share sheet once installed, bookmarklet on desktop), or
+  import Kindle `My Clippings.txt`.
+- **Daily reminder** — an optional push notification, sent by a GitHub Action.
+- **Installable & offline** — a PWA: "Add to Home Screen" on a phone.
+- **Private** — everything lives in your browser. Community votes, if enabled,
+  carry only an anonymous random id, a quote hash and the vote; your own
+  passages are never sent.
+
+## Community ratings (optional, Supabase)
+
+Shared ratings need a small database. Supabase's free tier is enough:
+
+1. Create a project at [supabase.com](https://supabase.com) (free plan).
+2. Open **SQL Editor → New query**, paste [`supabase/schema.sql`](supabase/schema.sql)
+   and run it. It creates the `votes` table (not publicly readable), two
+   functions to cast/clear a vote, and the aggregate view `quote_scores`.
+3. In **Project Settings → API**, copy the **Project URL** and the **anon
+   public** key into [`src/community-config.js`](src/community-config.js),
+   commit and push. Both values are public by design.
+
+Until then the app works on each reader's own ratings only.
 
 ## Run locally
 
@@ -64,8 +67,8 @@ There is no server, so the daily push is sent by the repository's own
 
 1. Generate a VAPID key pair (the public half is in `src/push-config.js`) and
    store the private half as the repository secret `VAPID_PRIVATE_KEY`.
-2. In the app, open Settings → **Notifications**, pick the hour, tap
-   **Enable on this device** and allow notifications. (iPhone/iPad: add the app
+2. In the app, open Settings → **Daily reminder**, pick the hour, tap
+   **Turn on** and allow notifications. (iPhone/iPad: add the app
    to the Home Screen first and open it from there.)
 3. Copy the configuration shown and save it as the repository secret
    `PUSH_CONFIG`. It contains the device's push subscription plus your sources,
@@ -93,6 +96,9 @@ node scripts/fetch.mjs seneca     # one source id (see src/sources.js)
 | `src/translate.js` | Translation providers (on-device → MyMemory → Google) |
 | `scripts/fetch.mjs` | Snapshot builder used by the Action |
 | `scripts/push.mjs`, `src/push.js`, `src/push-config.js` | Web Push: sender (Action), browser subscription, VAPID public key |
+| `src/journey.js` | Streaks, XP, levels, laurels |
+| `src/community.js`, `src/community-config.js`, `supabase/schema.sql` | Shared ratings (Supabase) |
+| `src/themes.js`, `scripts/themes.mjs` | Themes and the weekly theme index |
 | `data/` | Generated snapshot (committed by the Action) |
 | `sw.js`, `manifest.webmanifest` | PWA bits |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Requirements and architecture document |

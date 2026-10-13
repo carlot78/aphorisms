@@ -2,12 +2,12 @@
   "id": "./",
   "name": "Aphorisms",
   "short_name": "Aphorisms",
-  "description": "One thought a day from the personal-development sources you choose.",
+  "description": "One thought a day from the great voices of wisdom.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f6f1e7",
-  "theme_color": "#f6f1e7",
+  "background_color": "#f3ead8",
+  "theme_color": "#f3ead8",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ],

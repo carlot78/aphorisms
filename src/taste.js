@@ -15,6 +15,7 @@ const SOURCE_GAIN = 0.9;
 const CONTENT_GAIN = 1.4;
 const EXPLORE = 0.2;
 const CANDIDATES = 40;
+const GLOBAL_GAIN = 1.6; // how much the community's votes count next to your own
 
 const STOP = new Set(
   ('about above after again against all also although among and another any are because been before being below between both but can cannot could did does doing down during each either else even ever every from further had has have having here hers herself himself his how however into its itself just least less like made make many more most much must myself neither never nor not now off once only other ought our ours ourselves out over own same shall she should since some such than that the their theirs them themselves then there these they this those thou thee thy thine through thus too under until upon very was were what when where whether which while who whom whose why will with within without would yet you your yours yourself yourselves hath doth shalt unto one two man men things thing')
@@ -90,29 +91,50 @@ function weighted(items, weights, rng) {
 }
 
 /**
- * Pick one quote from `buckets` (one array of quotes per source). Falls back
- * to uniform picking until there are MIN_RATINGS ratings, and on the
- * EXPLORE share of draws.
+ * Community signal for one quote from its `[up, meh, down]` counts, in (-1, 1).
+ * Smoothed with 4 neutral pseudo-votes so 1–2 votes barely move it.
  */
-export function pickPersonal(buckets, profile, rng, { bySource = true } = {}) {
+export function globalScore(entry) {
+  if (!entry) return 0;
+  const [up = 0, meh = 0, down = 0] = entry;
+  return (up - down) / (up + meh + down + 4);
+}
+
+/**
+ * Pick one quote from `buckets` (arrays of quotes). A bucket is either one
+ * author (followed sources) or a theme spanning many authors.
+ *
+ * Signals: the reader's own profile (once MIN_RATINGS ratings exist) and the
+ * community scores `global` (`{ quoteId: [up, meh, down] }`), when available.
+ * An EXPLORE share of draws stays uniform so the pool never narrows.
+ */
+export function pickPersonal(buckets, profile, rng, { global = null } = {}) {
   const uniform = () => {
     const b = buckets[Math.floor(rng() * buckets.length)];
     return b[Math.floor(rng() * b.length)];
   };
-  if (!profile || profile.n < MIN_RATINGS || rng() < EXPLORE) return uniform();
+  const personal = profile && profile.n >= MIN_RATINGS;
+  if ((!personal && !global) || rng() < EXPLORE) return uniform();
 
-  // Author mode: one bucket per source, so the source affinity picks the
-  // bucket. Theme mode: buckets are themes spanning many authors, so the
-  // author's affinity is applied per candidate instead.
-  const bucket = bySource
-    ? weighted(buckets, buckets.map((b) => Math.exp(SOURCE_GAIN * sourceAffinity(profile, b[0].sourceId))), rng)
-    : buckets[Math.floor(rng() * buckets.length)];
+  const single = (b) => b.length > 0 && b[0].sourceId === b[b.length - 1].sourceId;
+  // A one-author bucket is weighted by that author's affinity; in a theme
+  // bucket the author affinity is applied per candidate instead.
+  const bucket = weighted(
+    buckets,
+    buckets.map((b) => (personal && single(b) ? Math.exp(SOURCE_GAIN * sourceAffinity(profile, b[0].sourceId)) : 1)),
+    rng
+  );
+  const perAuthor = personal && !single(bucket);
   const candidates = [];
   for (let i = 0; i < Math.min(CANDIDATES, bucket.length); i++) candidates.push(bucket[Math.floor(rng() * bucket.length)]);
   const clamp = (x) => Math.max(-2, Math.min(2, x));
-  const scores = candidates.map((q) =>
-    Math.exp(CONTENT_GAIN * clamp(contentAffinity(profile, q.text)) + (bySource ? 0 : SOURCE_GAIN * clamp(sourceAffinity(profile, q.sourceId))))
-  );
+  const scores = candidates.map((q) => {
+    let s = 0;
+    if (personal) s += CONTENT_GAIN * clamp(contentAffinity(profile, q.text));
+    if (perAuthor) s += SOURCE_GAIN * clamp(sourceAffinity(profile, q.sourceId));
+    if (global) s += GLOBAL_GAIN * globalScore(global[q.id]);
+    return Math.exp(s);
+  });
   return weighted(candidates, scores, rng);
 }
 

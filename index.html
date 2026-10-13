@@ -4,58 +4,72 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Aphorisms</title>
-  <meta name="description" content="One thought a day, drawn from the personal-development sources you choose.">
-  <meta name="theme-color" content="#f6f1e7" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#17161a" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="One thought a day from the great voices of wisdom.">
+  <meta name="theme-color" content="#f3ead8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#14110d" media="(prefers-color-scheme: dark)">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400;1,500&family=Cormorant+SC:wght@500;600&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="top">
-    <div class="brand">Aphorisms</div>
+    <button class="streak" id="journey-open" type="button" aria-label="Your journey">
+      <span class="flame" aria-hidden="true">🔥</span>
+      <span class="streak-n" id="streak-n">0</span>
+    </button>
     <div class="date" id="date"></div>
-    <button class="icon-btn" id="open-sources" title="Sources &amp; settings" aria-label="Sources and settings">
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4 7h16M4 12h16M4 17h10"/></svg>
+    <button class="icon-btn" id="settings-open" type="button" aria-label="Settings">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M4 7h16M4 12h16M4 17h10"/></svg>
     </button>
   </header>
 
   <main class="stage">
+    <!-- First open of the day: break the seal to reveal the thought. -->
+    <button class="seal" id="seal" type="button" hidden>
+      <span class="seal-disc" aria-hidden="true">Æ</span>
+      <span class="seal-label">Today's thought awaits</span>
+      <span class="seal-hint">Tap to break the seal</span>
+    </button>
+
     <article class="card" id="card" hidden>
-      <p class="mark" aria-hidden="true">“</p>
+      <div class="ornament" aria-hidden="true">❦</div>
       <blockquote class="quote" id="quote-text"></blockquote>
       <p class="translation" id="quote-translation" hidden></p>
+      <div class="rule" aria-hidden="true"><span>✦</span></div>
       <footer class="attribution">
         <a class="source" id="quote-source" target="_blank" rel="noopener"></a>
         <span class="cite" id="quote-cite"></span>
       </footer>
+      <p class="community" id="community" hidden></p>
       <p class="discover" id="discover" hidden>
         <span id="discover-text"></span>
-        <button type="button" class="btn small" id="discover-add">Add to my sources</button>
+        <button type="button" class="btn small" id="discover-add">Follow</button>
       </p>
-      <div class="rate" id="rate" role="radiogroup" aria-label="Rate this thought">
-        <span class="rate-label" id="rate-label">How much did this speak to you?</span>
-        <span class="stars" id="stars"></span>
+      <div class="rate" role="radiogroup" aria-label="Rate this thought">
+        <span class="rate-label" id="rate-label"></span>
+        <span class="faces" id="faces"></span>
       </div>
     </article>
 
     <section class="empty" id="empty" hidden>
-      <p id="empty-msg">Loading your sources…</p>
-      <button class="btn primary" id="empty-action" hidden>Choose sources</button>
+      <p id="empty-msg">Gathering wisdom…</p>
     </section>
 
     <div class="actions" id="actions" hidden>
-      <button class="btn" id="another" title="Show a different thought for today">Another</button>
-      <button class="btn" id="copy" title="Copy to clipboard">Copy</button>
-      <button class="btn" id="fav" title="Save to favourites" aria-pressed="false">☆ Save</button>
+      <button class="btn" id="another" type="button">Another</button>
+      <button class="btn" id="fav" type="button" aria-pressed="false">♡ Save</button>
+      <button class="btn" id="share" type="button">Share</button>
     </div>
   </main>
 
-  <details class="drawer" id="history-drawer">
-    <summary>Past days &amp; favourites</summary>
+  <details class="drawer" id="library">
+    <summary>Your library</summary>
     <div class="drawer-body">
-      <h3>Favourites</h3>
+      <h3>Saved</h3>
       <ul class="list" id="fav-list"></ul>
       <h3>Past days</h3>
       <ul class="list" id="history-list"></ul>
@@ -63,135 +77,110 @@
   </details>
 
   <p class="status" id="status" role="status" aria-live="polite"></p>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <dialog id="sources-dialog" class="dialog">
-    <form method="dialog" class="dialog-inner">
-      <header class="dialog-head">
-        <h2>Settings</h2>
-        <span class="muted" id="enabled-count"></span>
-        <button class="icon-btn" value="close" aria-label="Close">✕</button>
-      </header>
-
-      <div class="mode" role="group" aria-label="Choose thoughts by">
-        <span class="muted small">Choose by</span>
-        <button type="button" data-mode="authors" aria-pressed="true">Authors</button>
-        <button type="button" data-mode="themes" aria-pressed="false">Themes</button>
-      </div>
-
-      <nav class="tabs" role="tablist" aria-label="Settings sections">
-        <button type="button" role="tab" data-tab="themes" aria-selected="false">Themes</button>
-        <button type="button" role="tab" data-tab="topics" aria-selected="true">Topics</button>
-        <button type="button" role="tab" data-tab="sources" aria-selected="false">Sources</button>
-        <button type="button" role="tab" data-tab="translation" aria-selected="false">Translation</button>
-        <button type="button" role="tab" data-tab="collection" aria-selected="false">Collection</button>
-        <button type="button" role="tab" data-tab="notifications" aria-selected="false">Notifications</button>
-      </nav>
-
-      <section class="panel" data-panel="themes" role="tabpanel" hidden>
-        <p class="notice mode-note" data-for="themes">You're choosing by <strong>authors</strong> right now. Switch to <em>Themes</em> above to read by subject instead.</p>
-        <p class="muted small">Pick subjects instead of people: thoughts on these themes come from every author in the catalogue, so you'll meet voices you'd never have picked.</p>
-        <div class="topic-grid" id="theme-grid"></div>
-      </section>
-
-      <section class="panel" data-panel="topics" role="tabpanel">
-        <p class="notice mode-note" data-for="authors" hidden>You're choosing by <strong>themes</strong> right now — these author choices apply when you switch back to <em>Authors</em>.</p>
-        <p class="muted small">Pick whole areas at once. Tap a topic to hear from everyone in it; fine-tune individual voices under <em>Sources</em>.</p>
-        <div class="topic-grid" id="topic-grid"></div>
-
-        <h3>Your taste</h3>
-        <label class="switch"><input type="checkbox" id="taste-on"> Pick thoughts that suit me, based on my ratings</label>
-        <label class="switch"><input type="checkbox" id="discover-on"> Now and then, introduce me to an author I haven't chosen</label>
-        <p class="muted small" id="taste-summary"></p>
-        <div class="row"><button type="button" class="btn danger" id="taste-reset">Clear my ratings</button></div>
-      </section>
-
-      <section class="panel" data-panel="sources" role="tabpanel" hidden>
-        <p class="notice mode-note" data-for="authors" hidden>You're choosing by <strong>themes</strong> right now — these author choices apply when you switch back to <em>Authors</em>.</p>
-        <p class="muted small">Tick who you want to hear from. Quotes are pulled from <a href="https://en.wikiquote.org" target="_blank" rel="noopener">Wikiquote</a> automatically and refreshed every week.</p>
-        <div id="source-groups"></div>
-
-        <h3>Add any Wikiquote page</h3>
-        <div class="row">
-          <input type="text" id="custom-title" placeholder="e.g. Marcus Aurelius, Walden, Stoicism" aria-label="Wikiquote page title">
-          <button type="button" class="btn" id="add-custom">Add</button>
-        </div>
-        <p class="muted small" id="custom-hint"></p>
-
-        <h3>My own lines</h3>
-        <p class="muted small">One thought per line. These stay in this browser only.</p>
-        <textarea id="own-lines" rows="5" placeholder="What stands in the way becomes the way."></textarea>
-
-        <h3>Data</h3>
-        <div class="row wrap">
-          <button type="button" class="btn" id="refresh-all">Refresh from Wikiquote now</button>
-          <button type="button" class="btn" id="reset-seen">Forget what I've seen</button>
-          <button type="button" class="btn danger" id="reset-all">Reset everything</button>
-        </div>
-        <p class="muted small" id="data-status"></p>
-      </section>
-
-      <section class="panel" data-panel="translation" role="tabpanel" hidden>
-        <p class="muted small">Show the day's thought in another language as well. The English original is always kept.</p>
-        <div class="flag-grid" id="flag-grid" role="radiogroup" aria-label="Translation language"></div>
-        <p class="muted small" id="lang-hint"></p>
-      </section>
-      <section class="panel" data-panel="collection" role="tabpanel" hidden>
-        <p class="muted small">Passages you send in from other apps — a web page, a Kindle highlight, a PDF — join the daily rotation as <em>My collection</em>.</p>
-        <div class="row wrap">
-          <button type="button" class="btn primary" id="col-add">Add a passage</button>
-          <label class="btn" for="col-file">Import Kindle clippings…</label>
-          <input type="file" id="col-file" accept=".txt,text/plain" hidden>
-        </div>
-        <p class="muted small" id="col-status"></p>
-
-        <h3>How to send text here</h3>
-        <ul class="steps small">
-          <li><strong>Android</strong> — install the app (Chrome menu → <em>Install app</em>). Then select text in Chrome, Kindle, a PDF reader or any app → <em>Share</em> → <em>Aphorisms</em>.</li>
-          <li><strong>Computer</strong> — drag this button to your bookmarks bar: <a class="bookmarklet" id="col-bookmarklet" href="#">+ Aphorisms</a>. Select text on any web page and click it. (Browsers don't run bookmarklets inside their PDF viewer — copy the text and use <em>Add a passage</em>.)</li>
-          <li><strong>iPhone / iPad</strong> — create a Shortcut that accepts <em>Text</em> from the Share Sheet, then <em>Open URLs</em>: <code id="col-shortcut"></code> followed by the <em>URL-encoded</em> Shortcut Input.</li>
-          <li><strong>Kindle</strong> — besides sharing single highlights, connect the Kindle by USB and import <code>documents/My Clippings.txt</code> above.</li>
-        </ul>
-
-        <h3>Saved passages <span class="muted" id="col-count"></span></h3>
-        <ul class="list" id="col-list"></ul>
-      </section>
-      <section class="panel" data-panel="notifications" role="tabpanel" hidden>
-        <p class="muted small">Get the day's thought as a notification on this device — even when the app is closed.</p>
-        <p class="notice" id="push-unsupported" hidden></p>
-        <div id="push-controls" hidden>
-          <div class="row wrap">
-            <label class="field">Send at <select id="push-hour" aria-label="Hour"></select></label>
-            <button type="button" class="btn primary" id="push-enable">Enable on this device</button>
-            <button type="button" class="btn" id="push-test" hidden>Test notification</button>
-            <button type="button" class="btn danger" id="push-disable" hidden>Disable</button>
-          </div>
-          <p class="muted small" id="push-status"></p>
-          <div id="push-setup" hidden>
-            <h3>One-time setup</h3>
-            <ol class="steps small">
-              <li>Copy the configuration below.</li>
-              <li>Open the repository's <a href="https://github.com/carlot78/aphorisms/settings/secrets/actions/new" target="_blank" rel="noopener">new secret</a> page, name it <code>PUSH_CONFIG</code>, paste, save.</li>
-              <li>Optional: run the <a href="https://github.com/carlot78/aphorisms/actions/workflows/daily-push.yml" target="_blank" rel="noopener">Daily push</a> workflow once to receive a test push right away.</li>
-            </ol>
-            <textarea id="push-config" rows="4" readonly spellcheck="false" aria-label="Push configuration"></textarea>
-            <div class="row"><button type="button" class="btn" id="push-copy">Copy configuration</button></div>
-            <p class="muted small">The configuration bakes in your sources, language and hour — copy it again after changing them. For a second device, add its subscription to the <code>subscriptions</code> list of the existing secret.</p>
-          </div>
-        </div>
-      </section>
+  <!-- First launch -->
+  <dialog id="welcome" class="dialog">
+    <form method="dialog" class="dialog-inner welcome">
+      <div class="ornament" aria-hidden="true">❦</div>
+      <h2>What inspires you?</h2>
+      <p class="muted">Choose a few themes. Each day you'll receive one thought on them, from the great voices of the past and present.</p>
+      <div class="theme-grid" id="welcome-themes"></div>
+      <button type="submit" class="btn primary wide" id="welcome-go" disabled>Begin</button>
     </form>
   </dialog>
 
+  <!-- Settings: one page -->
+  <dialog id="settings" class="dialog">
+    <form method="dialog" class="dialog-inner">
+      <header class="dialog-head">
+        <h2>Your reading</h2>
+        <button class="icon-btn" value="close" aria-label="Close">✕</button>
+      </header>
+
+      <h3>Themes</h3>
+      <div class="theme-grid" id="theme-grid"></div>
+
+      <details class="section" id="authors-section">
+        <summary><span>Authors you follow</span><span class="muted" id="follow-count"></span></summary>
+        <p class="muted small">Optional. Followed authors are added to your themes. New voices are introduced now and then on their own.</p>
+        <div id="source-groups"></div>
+      </details>
+
+      <details class="section">
+        <summary><span>Translation</span><span class="muted" id="lang-current"></span></summary>
+        <p class="muted small">Show each thought in a second language too. The original always stays.</p>
+        <div class="flag-grid" id="flag-grid" role="radiogroup" aria-label="Translation language"></div>
+      </details>
+
+      <details class="section" id="reminder-section">
+        <summary><span>Daily reminder</span><span class="muted" id="push-current"></span></summary>
+        <p class="notice" id="push-unsupported" hidden></p>
+        <div id="push-controls" hidden>
+          <div class="row wrap">
+            <label class="field">At <select id="push-hour" aria-label="Hour"></select></label>
+            <button type="button" class="btn primary" id="push-enable">Turn on</button>
+            <button type="button" class="btn" id="push-test" hidden>Test</button>
+            <button type="button" class="btn danger" id="push-disable" hidden>Turn off</button>
+          </div>
+          <p class="muted small" id="push-status"></p>
+          <div id="push-setup" hidden>
+            <p class="small">One-time setup: copy this configuration and save it as the <code>PUSH_CONFIG</code> secret of the <a href="https://github.com/carlot78/aphorisms/settings/secrets/actions" target="_blank" rel="noopener">repository</a>. Copy it again after changing your themes or hour.</p>
+            <textarea id="push-config" rows="3" readonly spellcheck="false" aria-label="Push configuration"></textarea>
+            <div class="row"><button type="button" class="btn" id="push-copy">Copy configuration</button></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="section">
+        <summary><span>Your own passages</span><span class="muted" id="col-count"></span></summary>
+        <p class="muted small">Send text here from other apps — on Android: select text → Share → Aphorisms. Your passages join the daily rotation.</p>
+        <div class="row wrap">
+          <button type="button" class="btn" id="col-add">Add a passage</button>
+          <label class="btn" for="col-file">Import Kindle clippings</label>
+          <input type="file" id="col-file" accept=".txt,text/plain" hidden>
+          <a class="btn bookmarklet" id="col-bookmarklet" href="#" title="Drag to your bookmarks bar, then use it on any page">+ Aphorisms bookmarklet</a>
+        </div>
+        <p class="muted small" id="col-status"></p>
+        <ul class="list" id="col-list"></ul>
+      </details>
+
+      <p class="community-note small muted" id="community-note"></p>
+      <p class="foot-links small"><a href="#" id="reset-all">Reset the app</a></p>
+    </form>
+  </dialog>
+
+  <!-- Your journey -->
+  <dialog id="journey" class="dialog">
+    <form method="dialog" class="dialog-inner journey">
+      <header class="dialog-head">
+        <h2>Your journey</h2>
+        <button class="icon-btn" value="close" aria-label="Close">✕</button>
+      </header>
+      <div class="level">
+        <div class="level-name" id="level-name"></div>
+        <div class="bar"><span id="level-bar"></span></div>
+        <div class="muted small" id="level-next"></div>
+      </div>
+      <div class="stats" id="stats"></div>
+      <h3>The last four weeks</h3>
+      <div class="calendar" id="calendar"></div>
+      <h3>Laurels</h3>
+      <div class="badges" id="badges"></div>
+    </form>
+  </dialog>
+
+  <!-- Add a passage (share target, bookmarklet, manual) -->
   <dialog id="share-dialog" class="dialog">
     <form method="dialog" class="dialog-inner" id="share-form">
       <header class="dialog-head">
-        <h2>Add to my collection</h2>
+        <h2>Add a passage</h2>
         <button class="icon-btn" value="cancel" aria-label="Close">✕</button>
       </header>
       <label class="stack">Passage
         <textarea id="share-text" rows="6" required></textarea>
       </label>
-      <div class="row"><button type="button" class="btn" id="share-paste">Paste from clipboard</button></div>
+      <div class="row"><button type="button" class="btn small" id="share-paste">Paste from clipboard</button></div>
       <label class="stack">From (author, book or page)
         <input type="text" id="share-from" placeholder="e.g. Marcus Aurelius, Meditations">
       </label>
@@ -206,8 +195,8 @@
   </dialog>
 
   <footer class="foot">
-    <span>Text from <a href="https://en.wikiquote.org" target="_blank" rel="noopener">Wikiquote</a>, CC BY-SA 4.0.</span>
-    <a href="https://github.com/carlot78/aphorisms" target="_blank" rel="noopener" id="repo-link">Source</a>
+    <span>Words from <a href="https://en.wikiquote.org" target="_blank" rel="noopener">Wikiquote</a> · CC BY-SA 4.0</span>
+    <a href="https://github.com/carlot78/aphorisms" target="_blank" rel="noopener">Source</a>
   </footer>
 
   <script type="module" src="app.js"></script>
