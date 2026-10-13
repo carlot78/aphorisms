@@ -49,6 +49,13 @@ Shared ratings need a small database. Supabase's free tier is enough:
 
 Until then the app works on each reader's own ratings only.
 
+## Android app (Google Play)
+
+The app is packaged as a Trusted Web Activity with PWABuilder; the domain
+verification file lives in the [`carlot78.github.io`](https://github.com/carlot78/carlot78.github.io)
+repository. Step-by-step guide (in Italian), store texts and Data safety
+answers: [`docs/PLAY_STORE.md`](docs/PLAY_STORE.md).
+
 ## Run locally
 
 It's plain HTML/JS with no build step. Serve the folder over HTTP (ES modules
