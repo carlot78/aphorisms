@@ -42,3 +42,30 @@ export async function fetchScores() {
   }
   return out;
 }
+
+/**
+ * Save this device's push subscription and reminder preferences, so the
+ * daily-push Action can send to it (supabase/push.sql). Replaces any earlier
+ * row for this device.
+ */
+export async function savePush(deviceId, subscription, { hour, timeZone, lang, themes, sources }) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/save_push`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({
+      p_device: deviceId,
+      p_subscription: subscription.toJSON ? subscription.toJSON() : subscription,
+      p_hour: hour,
+      p_time_zone: timeZone,
+      p_lang: lang || '',
+      p_themes: themes || [],
+      p_sources: sources || [],
+    }),
+  });
+  if (!res.ok) throw new Error(`save_push: HTTP ${res.status} ${await res.text()}`);
+}
+
+export async function deletePush(deviceId) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/delete_push`, { method: 'POST', headers: headers(), body: JSON.stringify({ p_device: deviceId }) });
+  if (!res.ok) throw new Error(`delete_push: HTTP ${res.status}`);
+}

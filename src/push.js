@@ -1,6 +1,6 @@
 // Web Push client helpers. The browser subscribes here; the sending side is
-// .github/workflows/daily-push.yml + scripts/push.mjs, which read the
-// subscription from the PUSH_CONFIG repository secret.
+// .github/workflows/daily-push.yml + scripts/push.mjs, which read the saved
+// subscriptions from Supabase (see savePush in community.js).
 
 import { VAPID_PUBLIC_KEY } from './push-config.js';
 
@@ -56,20 +56,6 @@ export async function subscribe() {
 export async function unsubscribe() {
   const sub = await currentSubscription();
   if (sub) await sub.unsubscribe();
-}
-
-/** The blob the user pastes into the PUSH_CONFIG repository secret. */
-export function buildConfig({ subscription, sources, lang, hour, timeZone, mode = 'authors', themes = [] }) {
-  return {
-    version: 1,
-    hour,
-    timeZone,
-    lang: lang || '',
-    mode,
-    themes,
-    sources,
-    subscriptions: [subscription.toJSON()],
-  };
 }
 
 /** Show a local notification through the service worker (no push involved). */

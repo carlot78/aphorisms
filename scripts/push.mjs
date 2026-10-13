@@ -1,18 +1,24 @@
 #!/usr/bin/env node
-// Send the day's thought as a Web Push notification.
+// Send each subscriber their daily thought as a Web Push notification.
 //
-// Runs hourly from .github/workflows/daily-push.yml. Reads:
-//   PUSH_CONFIG        JSON pasted from the app's Notifications tab:
-//                      { hour, timeZone, lang, sources: [ids], subscriptions: [...] }
-//   VAPID_PRIVATE_KEY  private half of the key in src/push-config.js
-//   FORCE=true         send now regardless of the hour (workflow_dispatch)
+// Run by .github/workflows/daily-push.yml (hourly, best-effort). Reads:
+//   VAPID_PRIVATE_KEY    private half of the key in src/push-config.js
+//   SUPABASE_SECRET_KEY  the project's secret key — reads push_subscriptions
+//   FORCE=true           send to everyone now, even if already sent today
 //
-// The quote is picked from the bundled snapshot (data/sources/<id>.json) for
-// the configured sources, with the same "one bucket per source" rule the app
-// uses, seeded by the date so re-runs on the same day send the same quote.
+// Subscriptions are saved by the app itself (Settings → Daily reminder) via
+// the save_push function in supabase/push.sql. A reminder is due on the first
+// run at or after the subscriber's hour in their time zone, once per local
+// day (tracked in push_subscriptions.last_sent). Expired subscriptions
+// (404/410 from the push service) are deleted.
+//
+// The quote comes from the weekly snapshot (data/themes, data/sources) for
+// the subscriber's themes and followed authors, tilted by community votes,
+// seeded by day + device so re-runs pick the same thought.
 // Requires the `web-push` package (installed by the workflow, not vendored).
 
 import { readFile } from 'node:fs/promises';
+import { createECDH } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import webpush from 'web-push';
@@ -21,7 +27,8 @@ import { hash } from '../src/wikiquote.js';
 import { translate } from '../src/translate.js';
 import { VAPID_PUBLIC_KEY, PUSH_SUBJECT } from '../src/push-config.js';
 import { pickPersonal } from '../src/taste.js';
-import { communityEnabled, fetchScores } from '../src/community.js';
+import { fetchScores } from '../src/community.js';
+import { SUPABASE_URL } from '../src/community-config.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -34,87 +41,120 @@ function mulberry32(seed) {
   };
 }
 
-function localParts(timeZone, date = new Date()) {
-  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit' });
-  const parts = Object.fromEntries(fmt.formatToParts(date).map((p) => [p.type, p.value]));
-  return { day: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) % 24 };
+/** Local calendar day and hour in a time zone (UTC if the zone is unknown). */
+function localNow(timeZone, date = new Date()) {
+  let tz = timeZone || 'UTC';
+  try { new Intl.DateTimeFormat('en', { timeZone: tz }); } catch { tz = 'UTC'; }
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit' });
+  const p = Object.fromEntries(fmt.formatToParts(date).map((x) => [x.type, x.value]));
+  return { day: `${p.year}-${p.month}-${p.day}`, nowHour: Number(p.hour) % 24 };
 }
 
-async function loadPool(ids, dir = 'sources') {
-  const buckets = [];
-  for (const id of ids) {
+const fileCache = new Map();
+async function loadList(dir, id) {
+  const key = `${dir}/${id}`;
+  if (!fileCache.has(key)) {
     try {
       const data = JSON.parse(await readFile(path.join(ROOT, 'data', dir, `${id}.json`), 'utf8'));
-      if (data.quotes?.length) buckets.push(dir === 'themes' ? data.quotes : data.quotes.map((q) => ({ ...q, sourceId: id })));
+      fileCache.set(key, dir === 'themes' ? data.quotes : data.quotes.map((q) => ({ ...q, sourceId: id })));
     } catch {
-      // custom sources and "own" have no snapshot — skipped
+      fileCache.set(key, null); // custom sources have no snapshot
     }
   }
-  return buckets;
+  return fileCache.get(key);
 }
 
+async function poolFor(sub) {
+  const lists = [
+    ...(await Promise.all((sub.themes || []).map((id) => loadList('themes', id)))),
+    ...(await Promise.all((sub.sources || []).map((id) => loadList('sources', id)))),
+  ];
+  return lists.filter((l) => l?.length);
+}
+
+function publicFromPrivate(privateKey) {
+  const ecdh = createECDH('prime256v1');
+  ecdh.setPrivateKey(Buffer.from(privateKey, 'base64url'));
+  return ecdh.getPublicKey().toString('base64url');
+}
+
+/** Supabase REST with the secret key (bypasses row level security). */
+const db = (secret) => async (pathAndQuery, { method = 'GET', body } = {}) => {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathAndQuery}`, {
+    method,
+    headers: { apikey: secret, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`Supabase ${method} ${pathAndQuery.split('?')[0]}: HTTP ${res.status} ${await res.text()}`);
+  return method === 'GET' ? res.json() : null;
+};
+
 async function main() {
-  const raw = process.env.PUSH_CONFIG?.trim();
   const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
-  if (!raw || !privateKey) {
-    console.log('Push not configured (PUSH_CONFIG / VAPID_PRIVATE_KEY missing) — nothing to do.');
-    return;
-  }
-  const config = JSON.parse(raw);
-  const timeZone = config.timeZone || 'UTC';
-  const { day, hour } = localParts(timeZone);
+  const secret = process.env.SUPABASE_SECRET_KEY?.trim();
   const force = process.env.FORCE === 'true';
-  if (!force && hour !== Number(config.hour)) {
-    console.log(`It is ${hour}:xx in ${timeZone}; configured hour is ${config.hour}. Skipping.`);
+  const missing = [!privateKey && 'VAPID_PRIVATE_KEY', !secret && 'SUPABASE_SECRET_KEY'].filter(Boolean);
+  if (missing.length) {
+    console.log(`::warning title=Daily reminder not configured::Repository secret ${missing.join(' and ')} missing — no reminders are sent. See README "Daily reminder".`);
     return;
   }
-
-  // Themes and followed authors together, like the app (theme files already
-  // carry each quote's author).
-  const buckets = [...(await loadPool(config.themes || [], 'themes')), ...(await loadPool(config.sources || []))];
-  if (!buckets.length) throw new Error('No snapshot quotes for the configured sources.');
-  const rng = mulberry32(parseInt(hash(`${day}|push`), 16));
-  // Community votes (when the shared database is configured) tilt the pick.
-  let global = null;
-  if (communityEnabled()) {
-    try { global = await fetchScores(); } catch (err) { console.warn(err.message); }
+  if (!SUPABASE_URL) throw new Error('src/community-config.js has no SUPABASE_URL');
+  if (publicFromPrivate(privateKey) !== VAPID_PUBLIC_KEY) {
+    console.log('::error title=VAPID key mismatch::VAPID_PRIVATE_KEY does not belong to the public key in src/push-config.js.');
+    process.exit(1);
   }
-  const quote = pickPersonal(buckets, null, rng, { global });
-  const who = SOURCES.find((s) => s.id === quote.sourceId)?.name || quote.source;
-
-  let translation = '';
-  if (config.lang) {
-    try {
-      translation = await translate(quote.text, config.lang);
-    } catch (err) {
-      console.warn(`Translation failed: ${err.message}`);
-    }
-  }
-
-  const payload = {
-    date: day,
-    title: 'Thought for today',
-    body: `“${quote.text}” — ${who}`,
-    quote,
-    translation,
-    lang: config.lang || '',
-    url: './',
-  };
-  console.log(`${day} → ${who}: ${quote.text.slice(0, 80)}…`);
-
   webpush.setVapidDetails(PUSH_SUBJECT, VAPID_PUBLIC_KEY, privateKey);
+  const q = db(secret);
+
+  const subs = await q('push_subscriptions?select=device_id,subscription,hour,time_zone,lang,themes,sources,last_sent');
+  const due = subs
+    .map((s) => ({ ...s, ...localNow(s.time_zone) }))
+    .filter((s) => force || (s.nowHour >= s.hour && s.last_sent !== s.day));
+  console.log(`${subs.length} subscription(s), ${due.length} due now${force ? ' (forced)' : ''}.`);
+  if (!due.length) return;
+
+  let global = null;
+  try { global = await fetchScores(); } catch (err) { console.warn(`Community scores unavailable: ${err.message}`); }
+  const translations = new Map();
+
   let sent = 0;
-  for (const sub of config.subscriptions || []) {
+  let failed = 0;
+  for (const s of due) {
+    const id = s.device_id.slice(0, 8);
     try {
-      await webpush.sendNotification(sub, JSON.stringify(payload), { TTL: 12 * 3600, urgency: 'normal' });
+      const buckets = await poolFor(s);
+      if (!buckets.length) {
+        console.log(`${id}: no themes or authors with quotes — skipped`);
+        continue;
+      }
+      const rng = mulberry32(parseInt(hash(`${s.day}|${s.device_id}|push`), 16));
+      const quote = pickPersonal(buckets, null, rng, { global });
+      const who = SOURCES.find((x) => x.id === quote.sourceId)?.name || quote.source;
+      let translation = '';
+      if (s.lang) {
+        const key = `${s.lang}:${quote.id}`;
+        if (!translations.has(key)) {
+          try { translations.set(key, await translate(quote.text, s.lang)); } catch { translations.set(key, ''); }
+        }
+        translation = translations.get(key);
+      }
+      const payload = { date: s.day, title: 'Thought for today', body: `“${quote.text}” — ${who}`, quote, translation, lang: s.lang || '', url: './' };
+      await webpush.sendNotification(s.subscription, JSON.stringify(payload), { TTL: 12 * 3600, urgency: 'normal' });
+      await q(`push_subscriptions?device_id=eq.${s.device_id}`, { method: 'PATCH', body: { last_sent: s.day } });
       sent++;
+      console.log(`${id}: sent (${s.day}, reminder ${s.hour}:00 ${s.time_zone}) — ${who}`);
     } catch (err) {
-      const gone = err.statusCode === 404 || err.statusCode === 410;
-      console.error(`${gone ? 'Expired subscription' : 'Push failed'} (${err.statusCode || err.message}): ${sub.endpoint?.slice(0, 60)}…`);
+      if (err.statusCode === 404 || err.statusCode === 410) {
+        await q(`push_subscriptions?device_id=eq.${s.device_id}`, { method: 'DELETE' }).catch(() => {});
+        console.log(`${id}: subscription expired — removed`);
+      } else {
+        failed++;
+        console.log(`::error title=Push failed::${id}: ${err.statusCode || ''} ${err.body || err.message}`);
+      }
     }
   }
-  console.log(`Sent to ${sent} of ${(config.subscriptions || []).length} device(s).`);
-  if (!sent) process.exit(1);
+  console.log(`Sent ${sent}, failed ${failed}.`);
+  if (failed && !sent) process.exit(1);
 }
 
 main().catch((err) => {

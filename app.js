@@ -6,8 +6,8 @@ import { parseShared, parseClippings, bookmarklet } from './src/collection.js';
 import { buildProfile, pickPersonal, globalScore } from './src/taste.js';
 import { THEMES, themeById, themesOf } from './src/themes.js';
 import { emptyJourney, visit, liveStreak, levelOf, stats, checkBadges, roman, BADGES, XP } from './src/journey.js';
-import { communityEnabled, sendVote, fetchScores, toVote } from './src/community.js';
-import { pushSupported, isIos, isStandalone, currentSubscription, subscribe, unsubscribe, buildConfig, showLocalNotification, readLatestPush } from './src/push.js';
+import { communityEnabled, sendVote, fetchScores, toVote, savePush, deletePush } from './src/community.js';
+import { pushSupported, isIos, isStandalone, currentSubscription, subscribe, unsubscribe, showLocalNotification, readLatestPush } from './src/push.js';
 
 const FRESH_MS = 7 * 24 * 3600 * 1000; // re-fetch sources and themes weekly
 const SNAPSHOT_RETRY_MS = 24 * 3600 * 1000;
@@ -37,7 +37,6 @@ const el = {
   flagGrid: $('flag-grid'), langCurrent: $('lang-current'),
   pushCurrent: $('push-current'), pushUnsupported: $('push-unsupported'), pushControls: $('push-controls'), pushHour: $('push-hour'),
   pushEnable: $('push-enable'), pushTest: $('push-test'), pushDisable: $('push-disable'), pushStatus: $('push-status'),
-  pushSetup: $('push-setup'), pushConfig: $('push-config'), pushCopy: $('push-copy'),
   colCount: $('col-count'), colAdd: $('col-add'), colFile: $('col-file'), colStatus: $('col-status'), colList: $('col-list'), colBookmarklet: $('col-bookmarklet'),
   communityNote: $('community-note'), resetAll: $('reset-all'),
   journey: $('journey'), levelName: $('level-name'), levelBar: $('level-bar'), levelNext: $('level-next'), stats: $('stats'), calendar: $('calendar'), badges: $('badges'),
@@ -886,13 +885,15 @@ const timeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 const hh = (h) => `${String(h).padStart(2, '0')}:00`;
 
 async function renderReminder() {
-  const supported = pushSupported() && location.protocol !== 'file:';
+  const supported = pushSupported() && location.protocol !== 'file:' && communityEnabled();
   el.pushUnsupported.hidden = supported;
   el.pushControls.hidden = !supported;
   if (!supported) {
-    el.pushUnsupported.textContent = isIos() && !isStandalone()
-      ? 'On iPhone and iPad, reminders work once the app is on your Home Screen: Share → "Add to Home Screen".'
-      : 'This browser does not support notifications.';
+    el.pushUnsupported.textContent = !communityEnabled()
+      ? 'Reminders need the shared database, which is not configured.'
+      : isIos() && !isStandalone()
+        ? 'On iPhone and iPad, reminders work once the app is on your Home Screen: Share → "Add to Home Screen".'
+        : 'This browser does not support notifications.';
     el.pushCurrent.textContent = '';
     return;
   }
@@ -902,16 +903,41 @@ async function renderReminder() {
   let swError = '';
   try { sub = await currentSubscription(); } catch (err) { swError = err.message; }
   el.pushEnable.hidden = !!sub;
-  el.pushTest.hidden = el.pushDisable.hidden = el.pushSetup.hidden = !sub;
+  el.pushTest.hidden = el.pushDisable.hidden = !sub;
   el.pushCurrent.textContent = sub ? hh(settings.pushHour) : 'off';
   if (sub) {
-    el.pushStatus.textContent = Notification.permission === 'granted'
-      ? `On — one thought a day at ${hh(settings.pushHour)} (${timeZone()}).`
-      : 'Notifications are blocked in the browser settings for this site.';
-    el.pushConfig.value = JSON.stringify(buildConfig({ subscription: sub, sources: settings.enabled, themes: settings.themes, mode: 'mixed', lang: settings.lang, hour: settings.pushHour, timeZone: timeZone() }));
+    const sync = store.get('pushSync', null);
+    el.pushStatus.textContent = Notification.permission !== 'granted'
+      ? 'Notifications are blocked in the browser settings for this site.'
+      : sync?.error
+        ? `On, but not registered yet (${sync.error}) — it will retry.`
+        : `On — one thought a day from ${hh(settings.pushHour)} (${timeZone()}).`;
   } else {
     el.pushStatus.textContent = swError ? `Not available here: ${swError}` : Notification.permission === 'denied' ? 'Notifications are blocked for this site.' : '';
-    el.pushConfig.value = '';
+  }
+}
+
+/**
+ * Register (or refresh) this device's reminder in the shared database, with
+ * the current hour, time zone, language, themes and authors. Called when the
+ * reminder is turned on, when settings change, and on each launch (cheap,
+ * keeps a rotated subscription endpoint current).
+ */
+async function syncPush() {
+  if (!communityEnabled() || !pushSupported()) return;
+  let sub = null;
+  try { sub = await currentSubscription(); } catch { return; }
+  if (!sub) return;
+  const prefs = { hour: settings.pushHour, timeZone: timeZone(), lang: settings.lang, themes: settings.themes, sources: settings.enabled };
+  const fingerprint = JSON.stringify([sub.endpoint, prefs]);
+  const last = store.get('pushSync', null);
+  if (last?.fingerprint === fingerprint && !last.error && Date.now() - last.at < 7 * 86400000) return;
+  try {
+    await savePush(deviceId(), sub, prefs);
+    store.set('pushSync', { fingerprint, at: Date.now() });
+  } catch (err) {
+    store.set('pushSync', { fingerprint: '', at: Date.now(), error: err.message.slice(0, 80) });
+    console.warn(err.message);
   }
 }
 
@@ -985,6 +1011,7 @@ async function applySelection() {
   await Promise.all([ensureThemes(), ensureSources({ onLoaded: () => { if (!current) showToday(); } })]);
   if (!stillEligible(current)) showToday({ replace: true });
   prepareDiscovery();
+  syncPush(); // keep the reminder's themes, language and hour current
 }
 
 function bind() {
@@ -1038,22 +1065,29 @@ function bind() {
   });
 
   // Reminder
-  el.pushHour.addEventListener('change', () => { settings.pushHour = Number(el.pushHour.value); saveSettings(); renderReminder(); });
+  el.pushHour.addEventListener('change', async () => { settings.pushHour = Number(el.pushHour.value); saveSettings(); await syncPush(); renderReminder(); });
   el.pushEnable.addEventListener('click', async () => {
     el.pushEnable.disabled = true;
-    try { await subscribe(); } catch (err) { el.pushStatus.textContent = `Could not turn on: ${err.message}`; }
+    try {
+      await subscribe();
+      await syncPush();
+      toast('Daily reminder on');
+    } catch (err) {
+      el.pushStatus.textContent = `Could not turn on: ${err.message}`;
+    }
     el.pushEnable.disabled = false;
     renderReminder();
   });
-  el.pushDisable.addEventListener('click', async () => { try { await unsubscribe(); } catch { /* ignore */ } renderReminder(); });
+  el.pushDisable.addEventListener('click', async () => {
+    try { await unsubscribe(); } catch { /* ignore */ }
+    try { await deletePush(deviceId()); } catch (err) { console.warn(err.message); }
+    store.remove('pushSync');
+    renderReminder();
+  });
   el.pushTest.addEventListener('click', async () => {
     try {
-      await showLocalNotification('Thought for today', { body: current ? `“${current.text}” — ${nameOf(current)}` : 'Your daily thought.', icon: 'icon.svg', tag: 'daily-thought-test' });
+      await showLocalNotification('Thought for today', { body: current ? `“${current.text}” — ${nameOf(current)}` : 'Your daily thought.', icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', tag: 'daily-thought-test' });
     } catch (err) { el.pushStatus.textContent = err.message; }
-  });
-  el.pushCopy.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(el.pushConfig.value); el.pushCopy.textContent = 'Copied ✓'; } catch { el.pushConfig.select(); }
-    setTimeout(() => { el.pushCopy.textContent = 'Copy configuration'; }, 1500);
   });
 
   // Own passages
@@ -1154,6 +1188,7 @@ async function init() {
   if (!needsWelcome) await applySelection();
   flushVotes();
   refreshGlobal();
+  syncPush();
 }
 
 init();

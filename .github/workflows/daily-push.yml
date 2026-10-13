@@ -1,18 +1,20 @@
 name: Daily push
 
-# Sends the day's thought as a Web Push notification at the hour configured
-# in the PUSH_CONFIG secret (pasted from the app's Notifications tab). Runs
-# hourly and exits early unless it is that hour in the configured time zone.
+# Sends every subscriber their daily thought. Subscriptions (with hour, time
+# zone, themes, language) are saved by the app itself in Supabase; each one is
+# sent on the first run at or after its hour, once per local day. GitHub's
+# hourly schedule is best-effort, hence two slots per hour.
 
 on:
   schedule:
     - cron: '7 * * * *'
+    - cron: '37 * * * *'
   workflow_dispatch:
     inputs:
       force:
-        description: 'Send now, ignoring the configured hour'
+        description: 'Send to every subscriber now, even if already sent today'
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: read
@@ -34,9 +36,9 @@ jobs:
       - name: Install web-push
         run: npm install --no-save --no-package-lock --no-audit --no-fund web-push@3.6.7
 
-      - name: Send
+      - name: Send due reminders
         env:
-          PUSH_CONFIG: ${{ secrets.PUSH_CONFIG }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force && 'true' || 'false' }}
         run: node scripts/push.mjs

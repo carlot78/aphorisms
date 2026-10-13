@@ -29,7 +29,7 @@ maintaining a quote list.
 - **Send text from other apps** — share a passage from Chrome, Kindle, a PDF
   reader… (Android share sheet once installed, bookmarklet on desktop), or
   import Kindle `My Clippings.txt`.
-- **Daily reminder** — an optional push notification, sent by a GitHub Action.
+- **Daily reminder** — optional push notification at your hour, for every reader (subscriptions in Supabase, sent by a GitHub Action).
 - **Installable & offline** — a PWA: "Add to Home Screen" on a phone.
 - **Private** — everything lives in your browser. Community votes, if enabled,
   carry only an anonymous random id, a quote hash and the vote; your own
@@ -67,24 +67,27 @@ python -m http.server 8080
 
 then open http://localhost:8080.
 
-## Push notifications (optional)
+## Daily reminder (push notifications)
 
-There is no server, so the daily push is sent by the repository's own
-[`daily-push.yml`](.github/workflows/daily-push.yml) workflow. One-time setup:
+Readers turn it on in the app (Settings → Daily reminder → *Turn on*). The
+device stores its push subscription, hour, time zone, themes and language in
+Supabase by itself ([`supabase/push.sql`](supabase/push.sql)), and keeps it
+current when settings change. The
+[`daily-push.yml`](.github/workflows/daily-push.yml) workflow runs twice an
+hour and sends each subscriber their thought on the first run at or after their
+hour, once per local day; expired subscriptions are removed.
 
-1. Generate a VAPID key pair (the public half is in `src/push-config.js`) and
-   store the private half as the repository secret `VAPID_PRIVATE_KEY`.
-2. In the app, open Settings → **Daily reminder**, pick the hour, tap
-   **Turn on** and allow notifications. (iPhone/iPad: add the app
-   to the Home Screen first and open it from there.)
-3. Copy the configuration shown and save it as the repository secret
-   `PUSH_CONFIG`. It contains the device's push subscription plus your sources,
-   language and hour — copy it again after changing those.
+One-time setup:
 
-The workflow runs hourly, and at your hour picks a quote from your sources in
-the snapshot, translates it if you chose a language, and pushes it. Opening the
-app from the notification shows that same quote. Run the workflow manually
-from the Actions tab to get a test push immediately.
+1. In Supabase: **SQL Editor → New query**, paste `supabase/push.sql`, run.
+2. Repository secrets (**Settings → Secrets and variables → Actions**):
+   - `VAPID_PRIVATE_KEY` — private half of the key in `src/push-config.js`;
+   - `SUPABASE_SECRET_KEY` — Supabase **Project Settings → API Keys → Secret
+     key** (`sb_secret_…`). Never put this one in the code.
+3. Test: **Actions → Daily push → Run workflow** with *force* ticked.
+
+GitHub's schedule is best-effort, so a reminder can arrive some minutes (rarely
+an hour or more) after the chosen time.
 
 ## Refresh the snapshot manually
 
