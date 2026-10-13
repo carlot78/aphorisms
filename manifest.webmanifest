@@ -3,13 +3,26 @@
   "name": "Aphorisms",
   "short_name": "Aphorisms",
   "description": "One thought a day from the great voices of wisdom.",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#f3ead8",
   "theme_color": "#f3ead8",
+  "categories": ["books", "education", "lifestyle"],
   "icons": [
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "screenshots": [
+    { "src": "screenshots/1-seal.jpg", "sizes": "432x864", "type": "image/jpeg", "form_factor": "narrow" },
+    { "src": "screenshots/3-thought.jpg", "sizes": "432x864", "type": "image/jpeg", "form_factor": "narrow" },
+    { "src": "screenshots/4-journey.jpg", "sizes": "432x864", "type": "image/jpeg", "form_factor": "narrow" },
+    { "src": "screenshots/2-welcome.jpg", "sizes": "432x864", "type": "image/jpeg", "form_factor": "narrow" }
   ],
   "share_target": {
     "action": "./?share",
