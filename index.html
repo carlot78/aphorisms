@@ -30,6 +30,10 @@
         <a class="source" id="quote-source" target="_blank" rel="noopener"></a>
         <span class="cite" id="quote-cite"></span>
       </footer>
+      <p class="discover" id="discover" hidden>
+        <span id="discover-text"></span>
+        <button type="button" class="btn small" id="discover-add">Add to my sources</button>
+      </p>
       <div class="rate" id="rate" role="radiogroup" aria-label="Rate this thought">
         <span class="rate-label" id="rate-label">How much did this speak to you?</span>
         <span class="stars" id="stars"></span>
@@ -68,7 +72,14 @@
         <button class="icon-btn" value="close" aria-label="Close">✕</button>
       </header>
 
+      <div class="mode" role="group" aria-label="Choose thoughts by">
+        <span class="muted small">Choose by</span>
+        <button type="button" data-mode="authors" aria-pressed="true">Authors</button>
+        <button type="button" data-mode="themes" aria-pressed="false">Themes</button>
+      </div>
+
       <nav class="tabs" role="tablist" aria-label="Settings sections">
+        <button type="button" role="tab" data-tab="themes" aria-selected="false">Themes</button>
         <button type="button" role="tab" data-tab="topics" aria-selected="true">Topics</button>
         <button type="button" role="tab" data-tab="sources" aria-selected="false">Sources</button>
         <button type="button" role="tab" data-tab="translation" aria-selected="false">Translation</button>
@@ -76,17 +87,26 @@
         <button type="button" role="tab" data-tab="notifications" aria-selected="false">Notifications</button>
       </nav>
 
+      <section class="panel" data-panel="themes" role="tabpanel" hidden>
+        <p class="notice mode-note" data-for="themes">You're choosing by <strong>authors</strong> right now. Switch to <em>Themes</em> above to read by subject instead.</p>
+        <p class="muted small">Pick subjects instead of people: thoughts on these themes come from every author in the catalogue, so you'll meet voices you'd never have picked.</p>
+        <div class="topic-grid" id="theme-grid"></div>
+      </section>
+
       <section class="panel" data-panel="topics" role="tabpanel">
+        <p class="notice mode-note" data-for="authors" hidden>You're choosing by <strong>themes</strong> right now — these author choices apply when you switch back to <em>Authors</em>.</p>
         <p class="muted small">Pick whole areas at once. Tap a topic to hear from everyone in it; fine-tune individual voices under <em>Sources</em>.</p>
         <div class="topic-grid" id="topic-grid"></div>
 
         <h3>Your taste</h3>
         <label class="switch"><input type="checkbox" id="taste-on"> Pick thoughts that suit me, based on my ratings</label>
+        <label class="switch"><input type="checkbox" id="discover-on"> Now and then, introduce me to an author I haven't chosen</label>
         <p class="muted small" id="taste-summary"></p>
         <div class="row"><button type="button" class="btn danger" id="taste-reset">Clear my ratings</button></div>
       </section>
 
       <section class="panel" data-panel="sources" role="tabpanel" hidden>
+        <p class="notice mode-note" data-for="authors" hidden>You're choosing by <strong>themes</strong> right now — these author choices apply when you switch back to <em>Authors</em>.</p>
         <p class="muted small">Tick who you want to hear from. Quotes are pulled from <a href="https://en.wikiquote.org" target="_blank" rel="noopener">Wikiquote</a> automatically and refreshed every week.</p>
         <div id="source-groups"></div>
 

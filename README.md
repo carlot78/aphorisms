@@ -30,10 +30,15 @@ maintaining a quote list.
   reader… to Aphorisms (Android share sheet once installed; bookmarklet on
   desktop; Shortcut on iPhone), or import Kindle `My Clippings.txt`. Saved
   passages join the daily rotation as *My collection*.
-- **Ratings that learn your taste** — rate each thought with 1–5 stars; after a
+- **Ratings that learn your taste** — rate each thought 🙁 😐 🙂; after a
   few ratings the daily pick leans towards the sources and themes you rate
   highly (one pick in five stays random). See and reset what it learned in
   Settings → Topics.
+- **New voices** — about once a week the app introduces an author you haven't
+  chosen and never seen, with a one-tap "Add to my sources".
+- **Choose by themes** — instead of authors, pick subjects (resilience, death
+  and time, habits, happiness…) and read what every author in the catalogue
+  says about them. The theme index is rebuilt weekly by the same Action.
 - **Push notifications** — optional daily notification with the day's thought
   (and its translation), sent by a GitHub Action; see below.
 - **Installable & offline** — it's a PWA. On a phone, "Add to Home Screen";

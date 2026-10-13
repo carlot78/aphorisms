@@ -29,6 +29,9 @@ jobs:
       - name: Fetch quotes
         run: node scripts/fetch.mjs
 
+      - name: Build theme index
+        run: node scripts/themes.mjs
+
       - name: Commit snapshot
         run: |
           git config user.name "github-actions[bot]"

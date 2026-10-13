@@ -4,6 +4,7 @@ import { translate, LANGUAGES, languageName } from './src/translate.js';
 import { flagSvg } from './src/flags.js';
 import { parseShared, parseClippings, bookmarklet } from './src/collection.js';
 import { buildProfile, pickPersonal, summarize, MIN_RATINGS } from './src/taste.js';
+import { THEMES, themeById, themesOf } from './src/themes.js';
 import { pushSupported, isIos, isStandalone, currentSubscription, subscribe, unsubscribe, buildConfig, showLocalNotification, readLatestPush } from './src/push.js';
 
 const FRESH_MS = 7 * 24 * 3600 * 1000; // re-fetch a source after a week
@@ -30,6 +31,8 @@ const el = {
   pushConfig: $('push-config'), pushCopy: $('push-copy'),
   colAdd: $('col-add'), colFile: $('col-file'), colStatus: $('col-status'), colList: $('col-list'), colCount: $('col-count'),
   colBookmarklet: $('col-bookmarklet'), colShortcut: $('col-shortcut'),
+  themeGrid: $('theme-grid'), modeButtons: [...document.querySelectorAll('[data-mode]')], modeNotes: [...document.querySelectorAll('.mode-note')],
+  discover: $('discover'), discoverText: $('discover-text'), discoverAdd: $('discover-add'), discoverOn: $('discover-on'),
   stars: $('stars'), rateLabel: $('rate-label'), tasteOn: $('taste-on'), tasteSummary: $('taste-summary'), tasteReset: $('taste-reset'),
   sharePaste: $('share-paste'), shareDialog: $('share-dialog'), shareText: $('share-text'), shareFrom: $('share-from'), shareUrl: $('share-url'), shareHint: $('share-hint'),
 };
@@ -73,6 +76,9 @@ let settings = store.get('settings', null) || {
   salt: Math.random().toString(36).slice(2),
 };
 settings.lang ||= ''; // translation language, '' = none (added after first release)
+settings.mode ||= 'authors'; // 'authors' or 'themes'
+settings.themes ||= [];
+settings.discover ??= true; // now and then, an author the reader hasn't chosen
 settings.taste ??= true; // lean the daily pick towards highly rated sources/themes
 settings.pushHour ??= 8; // local hour for the daily push notification
 const saveSettings = () => store.set('settings', settings);
@@ -203,14 +209,23 @@ async function ensureSources({ force = false, onLoaded } = {}) {
 
 function pool() {
   const buckets = [];
-  for (const id of settings.enabled) {
-    const c = loadCached(id);
-    if (c?.quotes?.length) buckets.push(c.quotes);
+  // Theme mode: one bucket per chosen theme, spanning every author.
+  const keep = themeMode() ? (q) => matchesChosenThemes(q.text) : () => true;
+  if (themeMode()) {
+    for (const id of settings.themes) {
+      const t = loadThemeCached(id);
+      if (t?.quotes?.length) buckets.push(t.quotes);
+    }
+  } else {
+    for (const id of settings.enabled) {
+      const c = loadCached(id);
+      if (c?.quotes?.length) buckets.push(c.quotes);
+    }
   }
-  const own = ownSource();
-  if (own) buckets.push(own.quotes);
-  const col = collectionSource();
-  if (col) buckets.push(col.quotes); // the whole collection counts as one source
+  const own = ownSource()?.quotes.filter(keep);
+  if (own?.length) buckets.push(own);
+  const col = collectionSource()?.quotes.filter(keep);
+  if (col?.length) buckets.push(col); // the whole collection counts as one source
   return buckets;
 }
 
@@ -223,7 +238,13 @@ function pickQuote(rng) {
     store.set('seen', []); // everything shown once — start over
     unseen = buckets;
   }
-  return pickPersonal(unseen, settings.taste ? tasteProfile() : null, rng);
+  const profile = settings.taste ? tasteProfile() : null;
+  // Now and then: an author the reader hasn't chosen and has never met.
+  const discovery = !themeMode() && settings.discover ? store.get('discover', null) : null;
+  if (discovery && rng() < DISCOVER_RATE) {
+    return { ...pickPersonal([discovery.quotes], profile, rng), discover: true };
+  }
+  return pickPersonal(unseen, profile, rng, { bySource: !themeMode() });
 }
 
 function markSeen(quote) {
@@ -258,8 +279,13 @@ function showToday({ replace = false } = {}) {
     }
     current = quote;
     markSeen(quote);
+    meet(quote.sourceId);
     store.set('today', { date, quote });
     recordHistory(date, quote);
+    if (quote.discover) {
+      store.remove('discover'); // used up — line up the next new voice
+      prepareDiscovery();
+    }
   }
   renderQuote(current);
   renderLists();
@@ -303,6 +329,7 @@ function renderQuote(quote) {
   el.cite.textContent = [quote.section, quote.cite].filter(Boolean).join(' · ');
   renderFavButton();
   renderStars(quote);
+  renderDiscover(quote);
   renderTranslation(quote);
 }
 
@@ -356,7 +383,7 @@ async function renderTranslation(quote) {
 // ---------- settings UI: topics, sources, translation ----------
 
 const THUMB_TTL = 30 * 24 * 3600 * 1000;
-const TABS = ['topics', 'sources', 'translation', 'collection', 'notifications'];
+const TABS = ['themes', 'topics', 'sources', 'translation', 'collection', 'notifications'];
 
 /**
  * Portrait thumbnails come from Wikipedia's `pageimages` API (the Wikiquote
@@ -519,7 +546,9 @@ function renderSources() {
 }
 
 function renderEnabledCount() {
-  el.enabledCount.textContent = `${settings.enabled.length} selected`;
+  el.enabledCount.textContent = themeMode()
+    ? `${settings.themes.length} theme${settings.themes.length === 1 ? '' : 's'}`
+    : `${settings.enabled.length} selected`;
 }
 
 function renderLanguageGrid() {
@@ -584,6 +613,9 @@ async function openSettings(tab) {
   renderNotifications();
   renderCollection();
   renderTaste();
+  renderThemes();
+  renderMode();
+  el.discoverOn.checked = settings.discover;
   renderDataStatus();
   el.ownLines.value = settings.ownLines;
   showTab(tab || store.get('ui.tab', 'topics'));
@@ -627,7 +659,7 @@ async function renderNotifications() {
     el.pushStatus.textContent = permission === 'granted'
       ? `Enabled on this device — one thought a day at ${String(settings.pushHour).padStart(2, '0')}:00 (${timeZone()}).`
       : 'Subscribed, but notifications are blocked in the browser settings for this site.';
-    el.pushConfig.value = JSON.stringify(buildConfig({ subscription: sub, sources: settings.enabled, lang: settings.lang, hour: settings.pushHour, timeZone: timeZone() }));
+    el.pushConfig.value = JSON.stringify(buildConfig({ subscription: sub, sources: settings.enabled, mode: settings.mode, themes: settings.themes, lang: settings.lang, hour: settings.pushHour, timeZone: timeZone() }));
   } else {
     el.pushStatus.textContent = swError
       ? `Cannot enable here: ${swError}`
@@ -854,9 +886,146 @@ function bindCollection() {
   });
 }
 
+// ---------- choosing by themes ----------
+
+const MAX_THEME_QUOTES = 250; // per theme in localStorage
+
+const themeMode = () => settings.mode === 'themes';
+
+function loadThemeCached(id) {
+  return store.get('theme.' + id, null);
+}
+
+/** Fetch the selected themes' quote lists (built weekly by the Action). */
+async function ensureThemes({ force = false } = {}) {
+  const failed = [];
+  for (const id of settings.themes) {
+    const c = loadThemeCached(id);
+    if (!force && c && Date.now() - c.fetchedAt < FRESH_MS) continue;
+    try {
+      const res = await fetch(`data/themes/${encodeURIComponent(id)}.json`, { cache: 'no-cache' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      store.set('theme.' + id, { fetchedAt: Date.now(), quotes: sample(data.quotes, MAX_THEME_QUOTES) });
+    } catch (err) {
+      if (!c) failed.push(themeById(id)?.name || id);
+      console.warn(`Theme ${id}:`, err.message);
+    }
+  }
+  setStatus(failed.length ? `Couldn't load themes: ${failed.join(', ')}` : '');
+  return { failed };
+}
+
+async function loadThemeIndex() {
+  const cached = store.get('themeIndex', null);
+  if (cached && Date.now() - cached.at < FRESH_MS) return cached.data;
+  try {
+    const res = await fetch('data/themes/index.json', { cache: 'no-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    store.set('themeIndex', { at: Date.now(), data });
+    return data;
+  } catch {
+    return cached?.data || null;
+  }
+}
+
+const matchesChosenThemes = (text) => themesOf(text).some((t) => settings.themes.includes(t));
+
+/** Can `q` stay as today's thought under the current selection? */
+function stillEligible(q) {
+  if (!q) return false;
+  if (q.discover) return true;
+  if (q.sourceId === OWN_ID) return !!ownSource() && (!themeMode() || matchesChosenThemes(q.text));
+  if (q.sourceId === COLLECTION_ID) return loadCollection().some((x) => x.id === q.id) && (!themeMode() || matchesChosenThemes(q.text));
+  if (themeMode()) return matchesChosenThemes(q.text);
+  return settings.enabled.includes(q.sourceId);
+}
+
+async function renderThemes() {
+  const index = await loadThemeIndex();
+  el.themeGrid.replaceChildren(
+    ...THEMES.map((t) => {
+      const on = settings.themes.includes(t.id);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'topic';
+      btn.dataset.state = on ? 'all' : 'none';
+      btn.setAttribute('aria-pressed', String(on));
+      btn.innerHTML = '<span class="icon" aria-hidden="true"></span><span class="body"><span class="name"></span><span class="blurb"></span><span class="meta"></span></span>';
+      btn.querySelector('.icon').textContent = t.icon;
+      btn.querySelector('.name').textContent = t.name;
+      btn.querySelector('.blurb').textContent = t.blurb;
+      const info = index?.themes?.[t.id];
+      btn.querySelector('.meta').textContent = info ? `${info.count} thoughts · ${info.authors} authors` : '';
+      btn.addEventListener('click', () => {
+        settings.themes = on ? settings.themes.filter((x) => x !== t.id) : [...settings.themes, t.id];
+        saveSettings();
+        renderThemes();
+        renderEnabledCount();
+      });
+      return btn;
+    })
+  );
+}
+
+function renderMode() {
+  for (const b of el.modeButtons) b.setAttribute('aria-pressed', String(b.dataset.mode === (settings.mode || 'authors')));
+  for (const n of el.modeNotes) n.hidden = n.dataset.for === (settings.mode || 'authors');
+  renderEnabledCount();
+}
+
+// ---------- discovering new authors ----------
+
+const DISCOVER_RATE = 1 / 7; // roughly once a week for a daily reader
+
+function metSources() {
+  let met = store.get('met', null);
+  if (!met) {
+    met = [...new Set(store.get('history', []).map((h) => h.quote.sourceId))];
+    store.set('met', met);
+  }
+  return met;
+}
+
+function meet(sourceId) {
+  const met = metSources();
+  if (!met.includes(sourceId)) store.set('met', [...met, sourceId]);
+}
+
+/** Prepare one never-seen, not-chosen author so a discovery pick is instant. */
+async function prepareDiscovery() {
+  if (themeMode() || !settings.discover || store.get('discover', null)) return;
+  const met = new Set(metSources());
+  const candidates = SOURCES.filter((s) => !settings.enabled.includes(s.id) && !met.has(s.id));
+  if (!candidates.length) return;
+  // Favour topics the reader already follows, but allow any.
+  const followed = new Set(settings.enabled.map((id) => findSource(id)?.group));
+  const weights = candidates.map((s) => (followed.has(s.group) ? 2 : 1));
+  let x = Math.random() * weights.reduce((a, b) => a + b, 0);
+  const pick = candidates.find((_, i) => (x -= weights[i]) <= 0) || candidates[0];
+  try {
+    const res = await fetch(`data/sources/${encodeURIComponent(pick.id)}.json`, { cache: 'no-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const quotes = sample(data.quotes, 60).map((q) => ({ ...q, sourceId: pick.id }));
+    if (quotes.length) store.set('discover', { id: pick.id, quotes });
+  } catch (err) {
+    console.warn('Discovery prefetch failed:', err.message);
+  }
+}
+
+function renderDiscover(quote) {
+  const src = quote?.discover ? findSource(quote.sourceId) : null;
+  el.discover.hidden = !src;
+  if (!src) return;
+  const added = settings.enabled.includes(src.id);
+  el.discoverText.textContent = added ? `${src.name} is now one of your sources.` : `A new voice for you: ${src.name} — ${src.blurb}.`;
+  el.discoverAdd.hidden = added;
+}
+
 // ---------- ratings & personalisation ----------
 
-const RATING_LABELS = ['', 'Not for me', 'Meh', 'Fine', 'Good', 'Spoke to me'];
 
 const loadRatings = () => store.get('ratings', {});
 const ratingOf = (quote) => (quote ? loadRatings()[quote.id]?.r || 0 : 0);
@@ -871,29 +1040,39 @@ function setRating(quote, r) {
   profileCache = null;
 }
 
+// Three faces. Stored on the same 1–5 scale the taste profile uses
+// (older 5-star ratings keep working): 🙁 = 1, 😐 = 3, 🙂 = 5.
+const FACES = [
+  { r: 1, label: 'Not for me', mouth: 'M8 16.5q4-3.5 8 0' },
+  { r: 3, label: "It's okay", mouth: 'M8.5 15.5h7' },
+  { r: 5, label: 'Spoke to me', mouth: 'M8 14q4 4 8 0' },
+];
+const faceOf = (r) => (!r ? null : r <= 2 ? FACES[0] : r === 3 ? FACES[1] : FACES[2]);
+const faceSvg = (f) =>
+  `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle class="eye" cx="9" cy="10" r="1.1"/><circle class="eye" cx="15" cy="10" r="1.1"/><path d="${f.mouth}"/></svg>`;
+
 function renderStars(quote) {
-  const r = ratingOf(quote);
+  const chosen = faceOf(ratingOf(quote));
   el.stars.replaceChildren(
-    ...[1, 2, 3, 4, 5].map((n) => {
+    ...FACES.map((f) => {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'star';
-      b.textContent = n <= r ? '★' : '☆';
+      b.className = 'face';
+      b.innerHTML = faceSvg(f);
       b.setAttribute('role', 'radio');
-      b.setAttribute('aria-checked', String(n === r));
-      b.setAttribute('aria-label', `${n} star${n > 1 ? 's' : ''} — ${RATING_LABELS[n]}`);
-      b.title = RATING_LABELS[n];
-      b.dataset.on = String(n <= r);
+      b.setAttribute('aria-checked', String(f === chosen));
+      b.setAttribute('aria-label', f.label);
+      b.title = f.label;
       b.addEventListener('click', () => {
         if (!current) return;
-        setRating(current, n === ratingOf(current) ? 0 : n); // tap the same star again to clear
+        setRating(current, f === faceOf(ratingOf(current)) ? 0 : f.r); // tap the same face again to clear
         renderStars(current);
         renderLists();
       });
       return b;
     })
   );
-  el.rateLabel.textContent = r ? RATING_LABELS[r] : 'How much did this speak to you?';
+  el.rateLabel.textContent = chosen ? chosen.label : 'How did this speak to you?';
 }
 
 function renderTaste() {
@@ -971,7 +1150,7 @@ function renderLists() {
     )
   );
   const history = store.get('history', []).filter((h) => h.date !== todayKey());
-  el.historyList.replaceChildren(...history.map((h) => { const r = ratingOf(h.quote); return quoteItem(h.quote, `${h.date} · ${findSource(h.quote.sourceId)?.name || h.quote.source}${r ? ` · ${"★".repeat(r)}` : ""}`); }));
+  el.historyList.replaceChildren(...history.map((h) => { const r = ratingOf(h.quote); return quoteItem(h.quote, `${h.date} · ${findSource(h.quote.sourceId)?.name || h.quote.source}${r ? ` · ${["🙁", "😐", "🙂"][FACES.indexOf(faceOf(r))]}` : ""}`); }));
 }
 
 
@@ -1006,16 +1185,36 @@ function bind() {
   bindNotifications();
   bindCollection();
   bindTaste();
+  for (const b of el.modeButtons) {
+    b.addEventListener('click', () => {
+      settings.mode = b.dataset.mode;
+      saveSettings();
+      renderMode();
+      showTab(themeMode() ? 'themes' : 'topics');
+    });
+  }
+  el.discoverOn.addEventListener('change', () => {
+    settings.discover = el.discoverOn.checked;
+    saveSettings();
+    if (!settings.discover) store.remove('discover');
+  });
+  el.discoverAdd.addEventListener('click', async () => {
+    if (!current?.discover) return;
+    setEnabled(current.sourceId, true);
+    renderDiscover(current);
+    await ensureSources();
+  });
 
   el.dialog.addEventListener('close', async () => {
     settings.ownLines = el.ownLines.value;
     saveSettings();
-    const { failed } = await ensureSources({ onLoaded: () => { if (!current) showToday(); } });
-    // If today's pick came from a source that is now disabled, choose again.
-    if (!current || !(settings.enabled.includes(current.sourceId) || (current.sourceId === OWN_ID && ownSource()) || (current.sourceId === COLLECTION_ID && loadCollection().some((q) => q.id === current.id)))) {
-      showToday({ replace: true });
-    }
-    if (failed.length) renderSources();
+    const { failed } = themeMode()
+      ? await ensureThemes()
+      : await ensureSources({ onLoaded: () => { if (!current) showToday(); } });
+    // If today's pick no longer fits the selection (source or theme removed), choose again.
+    if (!stillEligible(current)) showToday({ replace: true });
+    if (failed.length && !themeMode()) renderSources();
+    prepareDiscovery();
   });
 
   el.addCustom.addEventListener('click', async () => {
@@ -1118,8 +1317,10 @@ async function init() {
   consumeShareParams();
   renderLists();
   await adoptPushedQuote(); // a push received today wins over the local pick
-  await ensureSources({ onLoaded: () => { if (!current) showToday(); } });
+  if (themeMode()) await ensureThemes();
+  else await ensureSources({ onLoaded: () => { if (!current) showToday(); } });
   if (!current) showToday();
+  prepareDiscovery();
 }
 
 init();

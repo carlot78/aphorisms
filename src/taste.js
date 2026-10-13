@@ -94,21 +94,25 @@ function weighted(items, weights, rng) {
  * to uniform picking until there are MIN_RATINGS ratings, and on the
  * EXPLORE share of draws.
  */
-export function pickPersonal(buckets, profile, rng) {
+export function pickPersonal(buckets, profile, rng, { bySource = true } = {}) {
   const uniform = () => {
     const b = buckets[Math.floor(rng() * buckets.length)];
     return b[Math.floor(rng() * b.length)];
   };
   if (!profile || profile.n < MIN_RATINGS || rng() < EXPLORE) return uniform();
 
-  const bucket = weighted(
-    buckets,
-    buckets.map((b) => Math.exp(SOURCE_GAIN * sourceAffinity(profile, b[0].sourceId))),
-    rng
-  );
+  // Author mode: one bucket per source, so the source affinity picks the
+  // bucket. Theme mode: buckets are themes spanning many authors, so the
+  // author's affinity is applied per candidate instead.
+  const bucket = bySource
+    ? weighted(buckets, buckets.map((b) => Math.exp(SOURCE_GAIN * sourceAffinity(profile, b[0].sourceId))), rng)
+    : buckets[Math.floor(rng() * buckets.length)];
   const candidates = [];
   for (let i = 0; i < Math.min(CANDIDATES, bucket.length); i++) candidates.push(bucket[Math.floor(rng() * bucket.length)]);
-  const scores = candidates.map((q) => Math.exp(CONTENT_GAIN * Math.max(-2, Math.min(2, contentAffinity(profile, q.text)))));
+  const clamp = (x) => Math.max(-2, Math.min(2, x));
+  const scores = candidates.map((q) =>
+    Math.exp(CONTENT_GAIN * clamp(contentAffinity(profile, q.text)) + (bySource ? 0 : SOURCE_GAIN * clamp(sourceAffinity(profile, q.sourceId))))
+  );
   return weighted(candidates, scores, rng);
 }
 

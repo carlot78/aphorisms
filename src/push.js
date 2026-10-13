@@ -59,12 +59,14 @@ export async function unsubscribe() {
 }
 
 /** The blob the user pastes into the PUSH_CONFIG repository secret. */
-export function buildConfig({ subscription, sources, lang, hour, timeZone }) {
+export function buildConfig({ subscription, sources, lang, hour, timeZone, mode = 'authors', themes = [] }) {
   return {
     version: 1,
     hour,
     timeZone,
     lang: lang || '',
+    mode,
+    themes,
     sources,
     subscriptions: [subscription.toJSON()],
   };

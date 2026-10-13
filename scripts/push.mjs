@@ -38,12 +38,12 @@ function localParts(timeZone, date = new Date()) {
   return { day: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) % 24 };
 }
 
-async function loadPool(ids) {
+async function loadPool(ids, dir = 'sources') {
   const buckets = [];
   for (const id of ids) {
     try {
-      const data = JSON.parse(await readFile(path.join(ROOT, 'data', 'sources', `${id}.json`), 'utf8'));
-      if (data.quotes?.length) buckets.push(data.quotes.map((q) => ({ ...q, sourceId: id })));
+      const data = JSON.parse(await readFile(path.join(ROOT, 'data', dir, `${id}.json`), 'utf8'));
+      if (data.quotes?.length) buckets.push(dir === 'themes' ? data.quotes : data.quotes.map((q) => ({ ...q, sourceId: id })));
     } catch {
       // custom sources and "own" have no snapshot — skipped
     }
@@ -67,7 +67,9 @@ async function main() {
     return;
   }
 
-  const buckets = await loadPool(config.sources || []);
+  const buckets = config.mode === 'themes' && config.themes?.length
+    ? await loadPool(config.themes, 'themes') // theme files already carry each quote's author
+    : await loadPool(config.sources || []);
   if (!buckets.length) throw new Error('No snapshot quotes for the configured sources.');
   const rng = mulberry32(parseInt(hash(`${day}|push`), 16));
   const bucket = buckets[Math.floor(rng() * buckets.length)];
