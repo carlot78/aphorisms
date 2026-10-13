@@ -1,0 +1,49 @@
+{
+  "generated": "2026-10-13T15:12:05.209Z",
+  "themes": {
+    "resilience": {
+      "count": 400,
+      "authors": 70
+    },
+    "happiness": {
+      "count": 400,
+      "authors": 73
+    },
+    "love": {
+      "count": 400,
+      "authors": 74
+    },
+    "mortality": {
+      "count": 400,
+      "authors": 68
+    },
+    "courage": {
+      "count": 400,
+      "authors": 68
+    },
+    "mind": {
+      "count": 400,
+      "authors": 75
+    },
+    "wisdom": {
+      "count": 400,
+      "authors": 78
+    },
+    "discipline": {
+      "count": 400,
+      "authors": 72
+    },
+    "self": {
+      "count": 400,
+      "authors": 77
+    },
+    "simplicity": {
+      "count": 400,
+      "authors": 77
+    },
+    "purpose": {
+      "count": 400,
+      "authors": 71
+    }
+  }
+}
