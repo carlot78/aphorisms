@@ -2,7 +2,7 @@
 // Quote data lives in localStorage, so only the static files need caching.
 // Wikiquote API calls are never cached here.
 
-const VERSION = 'aphorisms-v10';
+const VERSION = 'aphorisms-v11';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'src/flags.js', 'src/collection.js', 'src/taste.js', 'src/themes.js', 'src/journey.js', 'src/community.js', 'src/community-config.js', 'src/push.js', 'src/push-config.js', 'manifest.webmanifest', 'icon.svg'];
 const PUSH_CACHE = 'aph-push'; // survives VERSION bumps: holds the last pushed quote
 const PUSH_LATEST = 'push/latest';
