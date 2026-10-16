@@ -45,11 +45,15 @@ export async function currentSubscription() {
 
 /** Ask permission and create (or reuse) the push subscription. */
 export async function subscribe() {
+  const wasGranted = Notification.permission === 'granted';
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') throw new Error('Notifications were not allowed.');
   const reg = await registration();
   const existing = await reg.pushManager.getSubscription();
-  if (existing) return existing;
+  // After notifications had been blocked the old subscription is usually
+  // dead at the push service — start a fresh one.
+  if (existing && wasGranted) return existing;
+  if (existing) await existing.unsubscribe().catch(() => {});
   return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
 }
 
@@ -74,4 +78,16 @@ export async function readLatestPush() {
   } catch {
     return null;
   }
+}
+
+/**
+ * Keep what the service worker needs to re-register by itself when the
+ * browser rotates the push subscription (pushsubscriptionchange in sw.js).
+ * Holds only public values: database URL + public key, VAPID public key,
+ * the anonymous device id and the reminder preferences.
+ */
+export async function savePushRenewalInfo(info) {
+  if (!('caches' in window)) return;
+  const cache = await caches.open(PUSH_CACHE);
+  await cache.put('push/renewal', new Response(JSON.stringify(info), { headers: { 'Content-Type': 'application/json' } }));
 }

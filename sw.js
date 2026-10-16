@@ -2,7 +2,7 @@
 // Quote data lives in localStorage, so only the static files need caching.
 // Wikiquote API calls are never cached here.
 
-const VERSION = 'aphorisms-v13';
+const VERSION = 'aphorisms-v14';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'src/flags.js', 'src/collection.js', 'src/taste.js', 'src/themes.js', 'src/journey.js', 'src/community.js', 'src/community-config.js', 'src/push.js', 'src/push-config.js', 'manifest.webmanifest', 'icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/badge-96.png', 'privacy.html'];
 const PUSH_CACHE = 'aph-push'; // survives VERSION bumps: holds the last pushed quote
 const PUSH_LATEST = 'push/latest';
@@ -80,10 +80,26 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// If the push service rotates the subscription, the app will notice the
-// change on next open and ask the user to copy the new config.
+// The browser may replace a push subscription at any time. Re-subscribe and
+// re-register it in the shared database right away, so reminders keep coming
+// even if the app is not opened (the app also re-confirms daily on launch).
+const b64urlToBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4)), (c) => c.charCodeAt(0));
+
 self.addEventListener('pushsubscriptionchange', (event) => {
-  event.waitUntil(
-    caches.open(PUSH_CACHE).then((c) => c.put('push/subscription-changed', new Response(String(Date.now()))))
-  );
+  event.waitUntil((async () => {
+    const res = await (await caches.open(PUSH_CACHE)).match('push/renewal');
+    if (!res) return;
+    const info = await res.json();
+    const sub = event.newSubscription
+      || (await self.registration.pushManager.getSubscription())
+      || (await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlToBytes(info.vapid) }));
+    await fetch(`${info.url}/rest/v1/rpc/save_push`, {
+      method: 'POST',
+      headers: { apikey: info.key, Authorization: `Bearer ${info.key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        p_device: info.device, p_subscription: sub.toJSON(), p_hour: info.hour, p_time_zone: info.timeZone,
+        p_lang: info.lang || '', p_themes: info.themes || [], p_sources: info.sources || [],
+      }),
+    });
+  })());
 });

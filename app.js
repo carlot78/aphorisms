@@ -7,7 +7,9 @@ import { buildProfile, pickPersonal, globalScore } from './src/taste.js';
 import { THEMES, themeById, themesOf } from './src/themes.js';
 import { emptyJourney, visit, liveStreak, levelOf, stats, checkBadges, roman, BADGES, XP } from './src/journey.js';
 import { communityEnabled, sendVote, fetchScores, toVote, savePush, deletePush } from './src/community.js';
-import { pushSupported, isIos, isStandalone, currentSubscription, subscribe, unsubscribe, showLocalNotification, readLatestPush } from './src/push.js';
+import { pushSupported, isIos, isStandalone, currentSubscription, subscribe, unsubscribe, showLocalNotification, readLatestPush, savePushRenewalInfo } from './src/push.js';
+import { VAPID_PUBLIC_KEY } from './src/push-config.js';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './src/community-config.js';
 
 const FRESH_MS = 7 * 24 * 3600 * 1000; // re-fetch sources and themes weekly
 const SNAPSHOT_RETRY_MS = 24 * 3600 * 1000;
@@ -902,13 +904,17 @@ async function renderReminder() {
   let sub = null;
   let swError = '';
   try { sub = await currentSubscription(); } catch (err) { swError = err.message; }
-  el.pushEnable.hidden = !!sub;
+  const blocked = Notification.permission !== 'granted';
+  // Subscribed but notifications were blocked on the phone (by hand, or by
+  // Android's automatic clean-up of permissions for rarely used sites).
+  el.pushEnable.hidden = !!sub && !blocked;
+  el.pushEnable.textContent = sub && blocked ? 'Turn back on' : 'Turn on';
   el.pushTest.hidden = el.pushDisable.hidden = !sub;
   el.pushCurrent.textContent = sub ? hh(settings.pushHour) : 'off';
   if (sub) {
     const sync = store.get('pushSync', null);
-    el.pushStatus.textContent = Notification.permission !== 'granted'
-      ? 'Notifications are blocked in the browser settings for this site.'
+    el.pushStatus.textContent = blocked
+      ? 'Notifications are switched off for this app on your phone, so no reminder can arrive. Tap "Turn back on", or allow notifications for Aphorisms in the phone settings.'
       : sync?.error
         ? `On, but not registered yet (${sync.error}) — it will retry.`
         : `On — one thought a day from ${hh(settings.pushHour)} (${timeZone()}).`;
@@ -927,14 +933,19 @@ async function syncPush() {
   if (!communityEnabled() || !pushSupported()) return;
   let sub = null;
   try { sub = await currentSubscription(); } catch { return; }
-  if (!sub) return;
+  if (!sub || Notification.permission !== 'granted') return;
   const prefs = { hour: settings.pushHour, timeZone: timeZone(), lang: settings.lang, themes: settings.themes, sources: settings.enabled };
   const fingerprint = JSON.stringify([sub.endpoint, prefs]);
   const last = store.get('pushSync', null);
-  if (last?.fingerprint === fingerprint && !last.error && Date.now() - last.at < 7 * 86400000) return;
+  // Re-confirm at least daily: the server drops subscriptions the push service
+  // reports as gone, and a confirmation is a cheap upsert.
+  if (last?.fingerprint === fingerprint && !last.error && Date.now() - last.at < 20 * 3600 * 1000) return;
   try {
     await savePush(deviceId(), sub, prefs);
     store.set('pushSync', { fingerprint, at: Date.now() });
+    // Let the service worker re-register on its own if the browser rotates
+    // the subscription while the app is closed (sw.js, pushsubscriptionchange).
+    await savePushRenewalInfo({ url: SUPABASE_URL, key: SUPABASE_ANON_KEY, vapid: VAPID_PUBLIC_KEY, device: deviceId(), ...prefs });
   } catch (err) {
     store.set('pushSync', { fingerprint: '', at: Date.now(), error: err.message.slice(0, 80) });
     console.warn(err.message);
@@ -1147,6 +1158,7 @@ function bind() {
     renderStage();
     adoptPushedQuote();
     flushVotes();
+    syncPush();
   });
   window.addEventListener('online', flushVotes);
 }
