@@ -1005,7 +1005,8 @@ function openShareDialog(shared = {}) {
 
 function consumeShareParams() {
   const params = new URLSearchParams(location.search);
-  if (!params.has('share') && !params.has('text')) return;
+  // Web share target uses ?share&…; the Android app (TWA) sends text/title/url only.
+  if (!['share', 'text', 'title', 'url'].some((p) => params.has(p))) return;
   history.replaceState(null, '', location.pathname);
   openShareDialog({ title: params.get('title') || '', text: params.get('text') || '', url: params.get('url') || '' });
 }
