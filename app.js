@@ -916,10 +916,16 @@ async function renderReminder() {
     el.pushStatus.textContent = blocked
       ? 'Notifications are switched off for this app on your phone, so no reminder can arrive. Tap "Turn back on", or allow notifications for Aphorisms in the phone settings.'
       : sync?.error
-        ? `On, but not registered yet (${sync.error}) — it will retry.`
-        : `On — one thought a day from ${hh(settings.pushHour)} (${timeZone()}).`;
+        ? `On, but the server could not be reached (${sync.error}) — it will retry.`
+        : `On — one thought a day from ${hh(settings.pushHour)} (${timeZone()}).${sync?.at ? ` Registered ${new Date(sync.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}.` : ''}`;
   } else {
-    el.pushStatus.textContent = swError ? `Not available here: ${swError}` : Notification.permission === 'denied' ? 'Notifications are blocked for this site.' : '';
+    el.pushStatus.textContent = swError
+      ? `Not available here: ${swError}`
+      : Notification.permission === 'denied'
+        ? 'Notifications are blocked for this app in the phone settings.'
+        : store.get('pushSync', null)
+          ? 'The reminder was switched off by the phone or browser (this can happen to sites used rarely). Tap "Turn on" to restart it — installing the app on your home screen makes this much less likely.'
+          : '';
   }
 }
 

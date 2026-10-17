@@ -146,7 +146,7 @@ async function main() {
     } catch (err) {
       if (err.statusCode === 404 || err.statusCode === 410) {
         await q(`push_subscriptions?device_id=eq.${s.device_id}`, { method: 'DELETE' }).catch(() => {});
-        console.log(`${id}: subscription expired — removed`);
+        console.log(`${id}: subscription expired — removed (push service said ${err.statusCode}: ${String(err.body || '').slice(0, 200).replace(/\s+/g, ' ')})`);
       } else {
         failed++;
         console.log(`::error title=Push failed::${id}: ${err.statusCode || ''} ${err.body || err.message}`);
