@@ -398,6 +398,23 @@ async function flushVotes() {
   }
 }
 
+/**
+ * Delete everything this device stored on the shared server: each anonymous
+ * rating (withdrawn one by one) and the reminder subscription. Own passages
+ * were never sent. Returns false if anything could not be deleted.
+ */
+async function deleteServerData() {
+  if (!communityEnabled() || !store.get('device', null)) return true;
+  let ok = true;
+  const ids = new Set([...Object.keys(loadRatings()), ...Object.keys(store.get('votesOut', {}))]);
+  for (const quoteId of ids) {
+    if (!/^[0-9a-f]{8}$/.test(quoteId)) continue; // own passages are never sent
+    try { await sendVote(deviceId(), { quoteId, vote: null }); } catch { ok = false; }
+  }
+  try { await deletePush(deviceId()); } catch { ok = false; }
+  return ok;
+}
+
 async function refreshGlobal() {
   if (!communityEnabled()) return;
   const cached = store.get('global', null);
@@ -1150,9 +1167,16 @@ function bind() {
     }
   });
 
-  el.resetAll.addEventListener('click', (e) => {
+  el.resetAll.addEventListener('click', async (e) => {
     e.preventDefault();
-    if (!confirm('Start over? This removes your themes, ratings, streak, saved thoughts and passages on this device.')) return;
+    if (!confirm('Delete all your data and start over? This removes your themes, ratings, streak, saved thoughts and passages on this device, and deletes your anonymous ratings and reminder from our server.')) return;
+    el.resetAll.textContent = 'Deleting…';
+    const ok = await deleteServerData();
+    if (!ok && !confirm('Some data on the server could not be deleted right now (no connection?). Delete the data on this device anyway? You can ask us to delete the rest — see the Privacy page.')) {
+      el.resetAll.textContent = 'Delete my data';
+      return;
+    }
+    try { await unsubscribe(); } catch { /* not subscribed */ }
     for (const k of store.keys()) store.remove(k);
     location.reload();
   });

@@ -1,4 +1,4 @@
-Service worker: precaches the `SHELL` list under cache `VERSION = 'aphorisms-v16'`, deletes older caches on activate (except the `aph-push` cache), serves same-origin GET requests stale-while-revalidate (see 3.8). Web Push: the `push` handler parses the JSON payload, stores it at `aph-push`/`push/latest` and calls `showNotification` (tag `daily-thought`, so a new day replaces the old one); `notificationclick` focuses an open window or opens one; `pushsubscriptionchange` leaves a marker in the cache.- **Push requires a one-time manual step.** With no server, the push subscription has to be pasted into a repository secret by the owner; each additional device means editing that secret. Delivery timing depends on GitHub's hourly cron (may run a few minutes late). iOS delivers push only to apps added to the Home Screen.# Aphorisms — Requirements & Architecture
+Service worker: precaches the `SHELL` list under cache `VERSION = 'aphorisms-v17'`, deletes older caches on activate (except the `aph-push` cache), serves same-origin GET requests stale-while-revalidate (see 3.8). Web Push: the `push` handler parses the JSON payload, stores it at `aph-push`/`push/latest` and calls `showNotification` (tag `daily-thought`, so a new day replaces the old one); `notificationclick` focuses an open window or opens one; `pushsubscriptionchange` leaves a marker in the cache.- **Push requires a one-time manual step.** With no server, the push subscription has to be pasted into a repository secret by the owner; each additional device means editing that secret. Delivery timing depends on GitHub's hourly cron (may run a few minutes late). iOS delivers push only to apps added to the Home Screen.# Aphorisms — Requirements & Architecture
 
 > **Version 2 (October 2026).** Simplified (themes first, one settings page, no modes), restyled as a classical book page, gamified (wax-seal ritual, streaks, levels, laurels), with optional community ratings. FR-20…FR-25 describe the current behaviour; where older sections mention tabs, "Choose by" modes or switches, FR-23 supersedes them.
 
@@ -167,7 +167,7 @@ Sender (Node, run by `.github/workflows/daily-push.yml`, needs the `web-push` np
 | `aph.discover` | `{ id, quotes }` — the next "new voice" candidate (60 quotes) | One at a time |
 | `aph.pushAdopted` | `"YYYY-MM-DD"` — the day whose pushed quote has already been adopted | — |
 | Cache `aph-push` → `push/latest` | Last push payload (Cache API, written by the service worker, read by the app) | Overwritten by each push |
-Service worker: precaches the `SHELL` list under cache `VERSION = 'aphorisms-v16'`, deletes older caches on activate, serves same-origin GET requests stale-while-revalidate (see 3.8).
+Service worker: precaches the `SHELL` list under cache `VERSION = 'aphorisms-v17'`, deletes older caches on activate, serves same-origin GET requests stale-while-revalidate (see 3.8).
 
 #### `manifest.webmanifest`
 PWA manifest: `name`/`short_name` "Aphorisms", `start_url` and `scope` `./`, `display: standalone`, background/theme `#f6f1e7`, single SVG icon `any maskable`.
@@ -291,7 +291,7 @@ All keys live in `localStorage` with the `aph.` prefix, JSON-encoded, accessed o
 ### 3.8 Offline / PWA
 
 - `app.js` registers `sw.js` when `serviceWorker` exists and the protocol is not `file:`.
-- **Install**: `caches.open('aphorisms-v16').addAll(SHELL)` where `SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'src/flags.js', 'src/collection.js', 'src/taste.js', 'src/themes.js', 'src/push.js', 'src/push-config.js', 'manifest.webmanifest', 'icon.svg']`, then `skipWaiting()`.
+- **Install**: `caches.open('aphorisms-v17').addAll(SHELL)` where `SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'src/flags.js', 'src/collection.js', 'src/taste.js', 'src/themes.js', 'src/push.js', 'src/push-config.js', 'manifest.webmanifest', 'icon.svg']`, then `skipWaiting()`.
 - **Activate**: every cache whose name is not `VERSION` is deleted, then `clients.claim()`. Bumping `VERSION` is how a shell update is rolled out.
 - **Fetch**: only same-origin `GET` requests are handled (`url.origin !== location.origin` → return, so Wikiquote, MyMemory and Google calls are never cached and never intercepted). Strategy is stale-while-revalidate: respond with the cached copy if present, otherwise the network response; in both cases the network response, when `ok`, is written back to the cache. This also covers `data/sources/*.json`, so a snapshot fetched once is available offline. If the network fails and nothing is cached, the promise resolves to `undefined` and the request errors normally.
 - Quote data itself is not in the SW cache; it lives in `localStorage`, which is why the shell alone suffices for offline use.
@@ -358,6 +358,6 @@ python -m http.server 8080        # serve locally (ES modules need HTTP, not fil
 
 **Add a translation provider.** Implement `async function viaX(text, lang)` in `src/translate.js` returning the translated string or throwing; use `timeout(ms)` / `withTimeout` for network or promise guards and `chunk(text, max)` if the API has a length limit. Insert it at the desired position in `PROVIDERS`. `translate` already handles fallthrough, the "unchanged output" check and error aggregation; `app.js` needs no change. If the provider is a cross-origin API, no service-worker change is needed either (non-same-origin requests are not intercepted).
 
-**Ship a shell update.** Bump `VERSION` in `sw.js` (e.g. `aphorisms-v16`) and, if new static files are added, list them in `SHELL`.
+**Ship a shell update.** Bump `VERSION` in `sw.js` (e.g. `aphorisms-v17`) and, if new static files are added, list them in `SHELL`.
 
 **Add a new persistent setting.** Extend the `settings` object in `app.js` with a default assignment after `store.get('settings', …)` (as done for `settings.lang ||= ''`) so existing installs are migrated on load, and call `saveSettings()` when it changes.

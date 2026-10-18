@@ -160,7 +160,7 @@ dell'indirizzo in alto: è il segnale che manca questo passo.
 | --- | --- |
 | L'app raccoglie o condivide dati utente? | **Sì** |
 | Tutti i dati sono criptati in transito? | **Sì** (solo HTTPS) |
-| Gli utenti possono chiedere l'eliminazione? | **Sì** (ritirando il voto, "Reset the app", o tramite GitHub Issues) |
+| Gli utenti possono chiedere l'eliminazione? | **Sì** — URL: `https://carlot78.github.io/aphorisms/privacy.html#delete-data` ("Delete my data" nell'app cancella anche i dati sul server) |
 | Tipi di dati raccolti | **Attività nell'app → Altre azioni dell'utente** (i voti 🙁/😐/🙂) e **Identificatori dispositivo o altri ID** (ID anonimo casuale generato dall'app) |
 | Per ciascuno: raccolto / condiviso | Raccolto: **Sì**. Condiviso con terze parti: **No** (Supabase è un fornitore di servizi per conto tuo) |
 | Trattamento effimero? | No |
