@@ -5,7 +5,7 @@ apre https://carlot78.github.io/aphorisms/ a schermo intero. Gli aggiornamenti a
 sito arrivano subito anche agli utenti Play; il pacchetto va ricaricato solo se
 cambiano icona, nome o impostazioni Android.
 
-**Stato (17 ottobre 2026):** pacchetto generato (passo 2 fatto) — `.aab`, `.apk` di prova e chiave di firma in `Documentiphorisms-android-signing` sul PC di Carlo (fuori dal repository). Impronta della chiave di caricamento già in `assetlinks.json` e verificata dall'API Digital Asset Links di Google. Manca l'impronta di Google Play App Signing (passo 3, dopo il primo caricamento).
+**Stato (17 ottobre 2026):** pacchetto generato (passo 2 fatto) — `.aab`, `.apk` di prova e chiave di firma in `F:/carlo/Documents/aphorisms-android-signing/` (la cartella Documenti) sul PC di Carlo (fuori dal repository). Impronta della chiave di caricamento già in `assetlinks.json` e verificata dall'API Digital Asset Links di Google. Manca l'impronta di Google Play App Signing (passo 3, dopo il primo caricamento).
 
 Già pronto nel repository:
 
