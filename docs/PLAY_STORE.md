@@ -36,7 +36,7 @@ Già pronto nel repository:
 
    | Campo | Valore |
    | --- | --- |
-   | Package ID | `io.github.carlot78.aphorisms` ← **esattamente questo** |
+   | Package ID | `com.aphorisms` ← **esattamente questo** |
    | App name | `Aphorisms` |
    | Launcher name | `Aphorisms` |
    | App version / version code | `1.0.0` / `1` |
