@@ -345,3 +345,6 @@ textarea { font-family: var(--display); font-size: 1.1rem; resize: vertical; }
 }
 /* Cormorant defaults to old-style figures ("1" looks like "I"); counters need lining ones. */
 .streak, .stat b, .level, .level-name, .bar + .muted, .badge .b-desc { font-variant-numeric: lining-nums tabular-nums; }
+
+/* Problem report */
+.diag { font: 0.7rem/1.4 ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem; max-height: 14rem; overflow: auto; white-space: pre-wrap; word-break: break-word; }

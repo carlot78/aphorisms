@@ -6,7 +6,7 @@ import { parseShared, parseClippings, bookmarklet } from './src/collection.js';
 import { buildProfile, pickPersonal, globalScore } from './src/taste.js';
 import { THEMES, themeById, themesOf } from './src/themes.js';
 import { emptyJourney, visit, liveStreak, levelOf, stats, checkBadges, roman, BADGES, XP } from './src/journey.js';
-import { communityEnabled, sendVote, fetchScores, toVote, savePush, deletePush } from './src/community.js';
+import { communityEnabled, sendVote, fetchScores, toVote, savePush, deletePush, submitReport, deleteReports } from './src/community.js';
 import { pushSupported, isIos, isStandalone, currentSubscription, subscribe, unsubscribe, showLocalNotification, readLatestPush, savePushRenewalInfo } from './src/push.js';
 import { VAPID_PUBLIC_KEY } from './src/push-config.js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './src/community-config.js';
@@ -41,6 +41,8 @@ const el = {
   pushEnable: $('push-enable'), pushTest: $('push-test'), pushDisable: $('push-disable'), pushStatus: $('push-status'),
   colCount: $('col-count'), colAdd: $('col-add'), colFile: $('col-file'), colStatus: $('col-status'), colList: $('col-list'), colBookmarklet: $('col-bookmarklet'),
   communityNote: $('community-note'), resetAll: $('reset-all'),
+  reportOpen: $('report-open'), reportDialog: $('report-dialog'), reportText: $('report-text'), reportDetails: $('report-details'),
+  reportStatus: $('report-status'), reportSend: $('report-send'),
   journey: $('journey'), levelName: $('level-name'), levelBar: $('level-bar'), levelNext: $('level-next'), stats: $('stats'), calendar: $('calendar'), badges: $('badges'),
   shareDialog: $('share-dialog'), shareText: $('share-text'), shareFrom: $('share-from'), shareUrl: $('share-url'), shareHint: $('share-hint'), sharePaste: $('share-paste'),
 };
@@ -412,6 +414,7 @@ async function deleteServerData() {
     try { await sendVote(deviceId(), { quoteId, vote: null }); } catch { ok = false; }
   }
   try { await deletePush(deviceId()); } catch { ok = false; }
+  try { await deleteReports(deviceId()); } catch { ok = false; }
   return ok;
 }
 
@@ -532,6 +535,88 @@ function renderJourney() {
     d.querySelector('.b-desc').textContent = j.badges[b.id] ? `${b.desc} · ${j.badges[b.id]}` : b.desc;
     return d;
   }));
+}
+
+// ---------- diagnostics & problem reports ----------
+
+const APP_BUILD = 'v18'; // keep in step with VERSION in sw.js
+const MAX_ISSUES = 20;
+
+/** Remember a recent error (shown in, and sent with, a problem report). */
+function logIssue(where, err) {
+  try {
+    const log = store.get('diag.log', []);
+    log.push({ at: new Date().toISOString(), where, msg: String(err?.message || err).slice(0, 300) });
+    store.set('diag.log', log.slice(-MAX_ISSUES));
+  } catch { /* never let logging break the app */ }
+}
+window.addEventListener('error', (e) => logIssue('error', e.error || e.message));
+window.addEventListener('unhandledrejection', (e) => logIssue('promise', e.reason));
+
+// The Play Store app (Trusted Web Activity) opens the site with an
+// android-app:// referrer; remember it, since later navigations lose it.
+if (document.referrer.startsWith('android-app://')) store.set('diag.twa', document.referrer);
+
+/** Technical facts that help reproduce a problem. No personal data. */
+async function diagnostics() {
+  let sub = null;
+  let swState = 'none';
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    swState = reg?.active ? 'active' : reg ? 'installing' : 'none';
+    sub = reg ? await reg.pushManager?.getSubscription() : null;
+  } catch (err) { swState = `error: ${err.message}`; }
+  const sync = store.get('pushSync', null);
+  return {
+    build: APP_BUILD,
+    when: new Date().toISOString(),
+    userAgent: navigator.userAgent,
+    language: navigator.language,
+    timeZone: timeZone(),
+    screen: `${screen.width}x${screen.height} @${devicePixelRatio}`,
+    mode: store.get('diag.twa', null) ? 'play-app' : isStandalone() ? 'installed-web-app' : 'browser-tab',
+    online: navigator.onLine,
+    serviceWorker: swState,
+    notifications: {
+      supported: pushSupported(),
+      permission: 'Notification' in window ? Notification.permission : 'unsupported',
+      subscribed: !!sub,
+      endpointHost: sub ? new URL(sub.endpoint).host : null,
+      lastRegistered: sync?.at ? new Date(sync.at).toISOString() : null,
+      lastError: sync?.error || null,
+      hour: settings.pushHour,
+    },
+    themes: settings.themes.length,
+    followed: settings.enabled.length,
+    recentErrors: store.get('diag.log', []),
+  };
+}
+
+async function openReport() {
+  el.reportText.value = '';
+  el.reportStatus.textContent = '';
+  el.reportSend.disabled = false;
+  el.reportDetails.textContent = JSON.stringify(await diagnostics(), null, 2);
+  el.reportDialog.showModal();
+  el.reportText.focus();
+}
+
+async function sendReport() {
+  const message = el.reportText.value.trim();
+  if (message.length < 3) {
+    el.reportStatus.textContent = 'Please describe what happened.';
+    return;
+  }
+  el.reportSend.disabled = true;
+  el.reportStatus.textContent = 'Sending…';
+  try {
+    await submitReport(deviceId(), message, await diagnostics());
+    el.reportDialog.close();
+    toast('Thank you — your report was sent');
+  } catch (err) {
+    el.reportSend.disabled = false;
+    el.reportStatus.textContent = `Could not send (${err.message}). Check your connection and try again.`;
+  }
 }
 
 // ---------- the seal: a small daily ritual ----------
@@ -946,6 +1031,18 @@ async function renderReminder() {
   }
 }
 
+/** A plain-language explanation of why turning the reminder on failed. */
+function reminderProblem(err) {
+  const permission = 'Notification' in window ? Notification.permission : 'unsupported';
+  if (permission === 'denied') {
+    return 'Notifications are blocked for Aphorisms on this phone, so the permission question cannot appear. Open the phone Settings → Apps → Aphorisms (or Chrome, if you use the website) → Notifications → Allow, then tap "Turn on" again.';
+  }
+  if (permission === 'default') {
+    return 'The permission question was closed without choosing. Tap "Turn on" again and choose "Allow".';
+  }
+  return `Could not turn on the reminder: ${err?.message || err}. Please use "Report a problem" below so we can fix it.`;
+}
+
 /**
  * Register (or refresh) this device's reminder in the shared database, with
  * the current hour, time zone, language, themes and authors. Called when the
@@ -971,7 +1068,7 @@ async function syncPush() {
     await savePushRenewalInfo({ url: SUPABASE_URL, key: SUPABASE_ANON_KEY, vapid: VAPID_PUBLIC_KEY, device: deviceId(), ...prefs });
   } catch (err) {
     store.set('pushSync', { fingerprint: '', at: Date.now(), error: err.message.slice(0, 80) });
-    console.warn(err.message);
+    logIssue('reminder.sync', err);
   }
 }
 
@@ -1103,15 +1200,25 @@ function bind() {
   el.pushHour.addEventListener('change', async () => { settings.pushHour = Number(el.pushHour.value); saveSettings(); await syncPush(); renderReminder(); });
   el.pushEnable.addEventListener('click', async () => {
     el.pushEnable.disabled = true;
+    el.pushStatus.textContent = 'Turning on…';
+    let problem = '';
     try {
       await subscribe();
       await syncPush();
-      toast('Daily reminder on');
+      const sync = store.get('pushSync', null);
+      if (sync?.error) problem = `Notifications are allowed, but the reminder could not be registered (${sync.error}). Check your connection and tap "Turn on" again.`;
+      else toast('Daily reminder on');
     } catch (err) {
-      el.pushStatus.textContent = `Could not turn on: ${err.message}`;
+      problem = reminderProblem(err);
+      logIssue('reminder.turnOn', err);
     }
     el.pushEnable.disabled = false;
-    renderReminder();
+    await renderReminder();
+    // renderReminder() rewrites the status line — show the problem after it.
+    if (problem) {
+      el.pushStatus.textContent = problem;
+      toast('The reminder could not be turned on — see the message below the button');
+    }
   });
   el.pushDisable.addEventListener('click', async () => {
     try { await unsubscribe(); } catch { /* ignore */ }
@@ -1166,6 +1273,9 @@ function bind() {
       el.colFile.value = '';
     }
   });
+
+  el.reportOpen.addEventListener('click', (e) => { e.preventDefault(); openReport(); });
+  el.reportSend.addEventListener('click', sendReport);
 
   el.resetAll.addEventListener('click', async (e) => {
     e.preventDefault();

@@ -69,3 +69,18 @@ export async function deletePush(deviceId) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/delete_push`, { method: 'POST', headers: headers(), body: JSON.stringify({ p_device: deviceId }) });
   if (!res.ok) throw new Error(`delete_push: HTTP ${res.status}`);
 }
+
+/** Send a problem report (message + technical diagnostics) — supabase/reports.sql. */
+export async function submitReport(deviceId, message, diagnostics) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/submit_report`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ p_device: deviceId, p_message: message.slice(0, 4000), p_diagnostics: diagnostics }),
+  });
+  if (!res.ok) throw new Error(res.status === 429 || /too many/i.test(await res.text()) ? 'too many reports today' : `HTTP ${res.status}`);
+}
+
+export async function deleteReports(deviceId) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/delete_reports`, { method: 'POST', headers: headers(), body: JSON.stringify({ p_device: deviceId }) });
+  if (!res.ok && res.status !== 404) throw new Error(`delete_reports: HTTP ${res.status}`);
+}

@@ -141,7 +141,7 @@
       </details>
 
       <p class="community-note small muted" id="community-note"></p>
-      <p class="foot-links small"><a href="privacy.html">Privacy</a> · <a href="#" id="reset-all">Delete my data</a></p>
+      <p class="foot-links small"><a href="#" id="report-open">Report a problem</a> · <a href="privacy.html">Privacy</a> · <a href="#" id="reset-all">Delete my data</a></p>
     </form>
   </dialog>
 
@@ -162,6 +162,29 @@
       <div class="calendar" id="calendar"></div>
       <h3>Laurels</h3>
       <div class="badges" id="badges"></div>
+    </form>
+  </dialog>
+
+  <!-- Report a problem -->
+  <dialog id="report-dialog" class="dialog">
+    <form method="dialog" class="dialog-inner">
+      <header class="dialog-head">
+        <h2>Report a problem</h2>
+        <button class="icon-btn" value="cancel" aria-label="Close">✕</button>
+      </header>
+      <label class="stack">What happened? What did you expect?
+        <textarea id="report-text" rows="5" maxlength="4000" placeholder="e.g. I tapped “Turn on” under Daily reminder and nothing happened."></textarea>
+      </label>
+      <details class="section">
+        <summary><span>Technical details sent with it</span></summary>
+        <p class="muted small">App version, phone and browser, notification status and recent errors — no personal data. They help us find the cause.</p>
+        <pre class="diag" id="report-details"></pre>
+      </details>
+      <p class="muted small" id="report-status"></p>
+      <div class="row wrap">
+        <button type="button" class="btn primary" id="report-send">Send report</button>
+        <button type="submit" class="btn" value="cancel">Cancel</button>
+      </div>
     </form>
   </dialog>
 
