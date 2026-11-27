@@ -2,8 +2,8 @@
 // Quote data lives in localStorage, so only the static files need caching.
 // Wikiquote API calls are never cached here.
 
-const VERSION = 'aphorisms-v18';
-const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'src/flags.js', 'src/collection.js', 'src/taste.js', 'src/themes.js', 'src/journey.js', 'src/community.js', 'src/community-config.js', 'src/push.js', 'src/push-config.js', 'manifest.webmanifest', 'icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/badge-96.png', 'privacy.html'];
+const VERSION = 'aphorisms-v19';
+const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'src/sources.js', 'src/wikiquote.js', 'src/translate.js', 'src/explain.js', 'src/flags.js', 'src/collection.js', 'src/taste.js', 'src/themes.js', 'src/journey.js', 'src/community.js', 'src/community-config.js', 'src/push.js', 'src/push-config.js', 'manifest.webmanifest', 'icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/badge-96.png', 'privacy.html'];
 const PUSH_CACHE = 'aph-push'; // survives VERSION bumps: holds the last pushed quote
 const PUSH_LATEST = 'push/latest';
 
@@ -49,9 +49,8 @@ self.addEventListener('push', (event) => {
     payload = { title: 'Aphorisms', body: event.data ? event.data.text() : '' };
   }
   const title = payload.title || 'Thought for today';
-  const body = payload.translation ? `${payload.body}\n\n${payload.translation}` : payload.body || '';
   event.waitUntil(
-    Promise.all([
+    notificationBody(payload).then((body) => Promise.all([
       // Remember it so the app can show this exact quote when opened.
       payload.quote
         ? caches.open(PUSH_CACHE).then((c) => c.put(PUSH_LATEST, new Response(JSON.stringify(payload), { headers: { 'Content-Type': 'application/json' } })))
@@ -64,9 +63,22 @@ self.addEventListener('push', (event) => {
         renotify: true,
         data: { url: payload.url || './', date: payload.date || '' },
       }),
-    ])
+    ]))
   );
 });
+
+/** The reader's display choice (saved by the app as renewal info): only their language, or the original + it. */
+async function notificationBody(p) {
+  let show = 'both';
+  try {
+    const res = await (await caches.open(PUSH_CACHE)).match('push/renewal');
+    if (res) show = (await res.json()).show || 'both';
+  } catch { /* default */ }
+  const who = p.body?.match(/ — ([^—]+)$/)?.[1];
+  if (show === 'lang' && p.translation) return who ? `“${p.translation}” — ${who}` : p.translation;
+  if (show === 'orig' && p.quote?.original && who) return `“${p.quote.original}” — ${who}${p.translation ? `\n\n${p.translation}` : ''}`;
+  return p.translation ? `${p.body}\n\n${p.translation}` : p.body || '';
+}
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();

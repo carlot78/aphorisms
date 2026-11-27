@@ -64,7 +64,7 @@ export function extractQuotes(html, sourceTitle) {
     for (const item of listItems(segment)) {
       const picked = pickText(item);
       if (!picked) continue;
-      const { text, cite } = picked;
+      const { text, cite, original } = picked;
       const key = text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       if (seen.has(key)) continue;
       seen.add(key);
@@ -74,6 +74,7 @@ export function extractQuotes(html, sourceTitle) {
         source: sourceTitle,
         section,
         cite,
+        ...(original ? { original } : {}),
       });
     }
   };
@@ -142,19 +143,39 @@ function pickText({ main, subs }) {
   const isCite = (s) => s.length <= 120 && (/\d/.test(s) || s.length <= 60);
   let text;
   let rest;
+  let original = '';
   if (looksEnglish(main)) {
     text = main;
     rest = subs;
+    // Some pages give the original as a sub-item: "Original: …" or just the
+    // foreign-language text.
+    const o = subs.find((s) => ORIGINAL_LABEL.test(s) || (!looksEnglish(s) && s.length >= 20 && !isCite(s) && !/^variant/i.test(s)));
+    if (o) original = o.replace(ORIGINAL_LABEL, '');
   } else {
-    const idx = subs.findIndex((s) => looksEnglish(s) && s.length >= MIN_LEN && !/^variant/i.test(s));
+    const looksLikeCite = (s) => /^(ch|chapter|bk|book|letter|essay|part)\.?\s*[\divxlc]+\b/i.test(s) || /\(tr(ans)?\.|\btranslated by\b/i.test(s);
+    const idx = subs.findIndex((s) => looksEnglish(s) && s.length >= MIN_LEN && !/^variant/i.test(s) && !looksLikeCite(s));
     if (idx < 0) return null;
     text = subs[idx];
     rest = subs.slice(idx + 1);
+    original = main;
   }
   text = cleanQuote(text);
   if (!text) return null;
-  const cite = rest.find((s) => isCite(s) && !/^variant/i.test(s)) || '';
-  return { text, cite };
+  const cite = rest.find((s) => isCite(s) && !/^variant/i.test(s) && s !== original) || '';
+  original = cleanOriginal(original, text);
+  return original ? { text, cite, original } : { text, cite };
+}
+
+// "Original:", "Original German:", "Original text:", "Latin:", "In French:" …
+const ORIGINAL_LABEL = /^(original(\s+[a-z]+)?|in\s+[a-z]+|latin|greek|french|german|italian|spanish|russian|chinese)\s*(text|version)?\s*:\s*/i;
+
+function cleanOriginal(original, english) {
+  original = original.replace(/^[“"'«„]+|[”"'»“]+$/g, '').trim();
+  if (original.length < 8 || original.length > MAX_LEN) return '';
+  if (original === english || looksEnglish(original)) return '';
+  // Mostly a citation (e.g. "Epistulae 1.2") rather than a sentence.
+  if (original.split(/\s+/).length < 3) return '';
+  return original;
 }
 
 function cleanQuote(text) {

@@ -139,6 +139,8 @@ async function main() {
         translation = translations.get(key);
       }
       const payload = { date: s.day, title: 'Thought for today', body: `“${quote.text}” — ${who}`, quote, translation, lang: s.lang || '', url: './' };
+      // Web Push payloads are capped near 4 KB: the original text goes first.
+      if (Buffer.byteLength(JSON.stringify(payload)) > 3600) payload.quote = { ...quote, original: undefined };
       await webpush.sendNotification(s.subscription, JSON.stringify(payload), { TTL: 12 * 3600, urgency: 'normal' });
       await q(`push_subscriptions?device_id=eq.${s.device_id}`, { method: 'PATCH', body: { last_sent: s.day } });
       sent++;

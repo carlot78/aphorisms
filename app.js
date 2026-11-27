@@ -2,6 +2,7 @@ import { SOURCES, TOPICS, CUSTOM_TOPIC } from './src/sources.js';
 import { fetchSource, hash } from './src/wikiquote.js';
 import { translate, LANGUAGES, languageName } from './src/translate.js';
 import { flagSvg } from './src/flags.js';
+import { explainAvailability, explain, explainLinks } from './src/explain.js';
 import { parseShared, parseClippings, bookmarklet } from './src/collection.js';
 import { buildProfile, pickPersonal, globalScore } from './src/taste.js';
 import { THEMES, themeById, themesOf } from './src/themes.js';
@@ -37,6 +38,8 @@ const el = {
   welcome: $('welcome'), welcomeThemes: $('welcome-themes'), welcomeGo: $('welcome-go'),
   settings: $('settings'), themeGrid: $('theme-grid'), groups: $('source-groups'), followCount: $('follow-count'), authorsSection: $('authors-section'),
   flagGrid: $('flag-grid'), langCurrent: $('lang-current'),
+  showMode: $('show-mode'), showOptions: $('show-options'), showNote: $('show-note'), sizes: $('sizes'), sizeCurrent: $('size-current'),
+  explainBtn: $('explain-btn'), explain: $('explain'),
   pushCurrent: $('push-current'), pushUnsupported: $('push-unsupported'), pushControls: $('push-controls'), pushHour: $('push-hour'),
   pushEnable: $('push-enable'), pushTest: $('push-test'), pushDisable: $('push-disable'), pushStatus: $('push-status'),
   colCount: $('col-count'), colAdd: $('col-add'), colFile: $('col-file'), colStatus: $('col-status'), colList: $('col-list'), colBookmarklet: $('col-bookmarklet'),
@@ -88,6 +91,8 @@ settings.customs ||= [];
 settings.themes ||= [];
 settings.lang ||= '';
 settings.pushHour ??= 8;
+settings.show ||= 'both'; // with a language chosen: 'both' (English + it), 'lang' (only it), 'orig' (original + it)
+settings.textSize ||= 1;
 for (const old of ['mode', 'taste', 'discover']) delete settings[old];
 const saveSettings = () => store.set('settings', settings);
 
@@ -539,7 +544,7 @@ function renderJourney() {
 
 // ---------- diagnostics & problem reports ----------
 
-const APP_BUILD = 'v18'; // keep in step with VERSION in sw.js
+const APP_BUILD = 'v19'; // keep in step with VERSION in sw.js
 const MAX_ISSUES = 20;
 
 /** Remember a recent error (shown in, and sent with, a problem report). */
@@ -588,6 +593,8 @@ async function diagnostics() {
     },
     themes: settings.themes.length,
     followed: settings.enabled.length,
+    reading: { lang: settings.lang, show: showMode(), textSize: settings.textSize },
+    onDeviceAI: await explainAvailability(),
     recentErrors: store.get('diag.log', []),
   };
 }
@@ -671,8 +678,7 @@ function renderQuote() {
   void el.card.offsetWidth;
   el.card.style.animation = '';
 
-  el.text.textContent = quote.text;
-  el.text.classList.toggle('long', quote.text.length > 260);
+  setMainText(mainText(quote), mainText(quote) === quote.text ? 'en' : '');
   el.source.textContent = nameOf(quote);
   const href = quote.url || loadCached(quote.sourceId)?.url || (findSource(quote.sourceId) ? `https://en.wikiquote.org/wiki/${encodeURIComponent(findSource(quote.sourceId).title.replace(/ /g, '_'))}` : '');
   if (href) el.source.href = href;
@@ -682,7 +688,21 @@ function renderQuote() {
   renderFav();
   renderDiscover();
   renderCommunity(quote);
+  resetExplain();
   renderTranslation(quote);
+}
+
+/** What the reader asked to see: 'en', 'both', 'lang' or 'orig'. */
+const showMode = () => (settings.lang ? settings.show : 'en');
+
+/** The big text before any translation arrives. */
+const mainText = (q) => (showMode() === 'orig' && q.original ? q.original : q.text);
+
+function setMainText(text, lang) {
+  el.text.textContent = text;
+  if (lang) el.text.setAttribute('lang', lang);
+  else el.text.setAttribute('lang', ''); // original language: unknown to us
+  el.text.classList.toggle('long', text.length > 260);
 }
 
 // Three faces, stored on the 1–5 scale the taste profile uses: 🙁 1, 😐 3, 🙂 5.
@@ -760,29 +780,149 @@ function rememberTranslation(q, lang, text) {
 
 async function renderTranslation(quote) {
   const lang = settings.lang;
+  const only = showMode() === 'lang'; // the translation replaces the English
   const seq = ++translationSeq;
-  el.translation.hidden = !lang;
+  el.translation.hidden = !lang || only;
+  el.text.classList.remove('pending');
   if (!lang) return;
   el.translation.setAttribute('lang', lang);
   const shown = (text) => {
-    el.translation.textContent = text;
-    el.translation.classList.remove('pending');
+    if (only) setMainText(text, lang);
+    else {
+      el.translation.textContent = text;
+      el.translation.classList.remove('pending');
+    }
     if (!loadJourney().translated) reward(0, (j) => { j.translated = 1; });
   };
   const hit = cachedTranslation(quote, lang);
   if (hit) return shown(hit);
-  el.translation.textContent = '…';
-  el.translation.classList.add('pending');
+  if (only) el.text.classList.add('pending'); // the English shows, faded, meanwhile
+  else {
+    el.translation.textContent = '…';
+    el.translation.classList.add('pending');
+  }
   try {
     const text = await translate(quote.text, lang);
     if (seq !== translationSeq) return;
     rememberTranslation(quote, lang, text);
+    el.text.classList.remove('pending');
     shown(text);
   } catch {
     if (seq !== translationSeq) return;
+    el.text.classList.remove('pending');
+    el.translation.hidden = false;
     el.translation.textContent = `(translation into ${languageName(lang)} unavailable right now)`;
     el.translation.classList.remove('pending');
   }
+}
+
+/** The text to share or copy, in the languages the reader sees. */
+function shareText(q) {
+  const tr = settings.lang ? cachedTranslation(q, settings.lang) : '';
+  const mode = showMode();
+  const main = mode === 'lang' && tr ? tr : mode === 'orig' && q.original ? q.original : q.text;
+  const extra = mode === 'lang' ? '' : tr;
+  return `“${main}”\n— ${nameOf(q)}` + (extra ? `\n\n${extra}` : '');
+}
+
+// ---------- explanation ("What does it mean?") ----------
+
+const MAX_EXPLANATIONS = 100;
+let explainSeq = 0;
+const exKey = (q) => `${settings.lang || 'en'}:${q.id}`;
+
+function resetExplain() {
+  explainSeq++;
+  el.explain.hidden = true;
+  el.explain.replaceChildren();
+  el.explainBtn.setAttribute('aria-expanded', 'false');
+  el.explainBtn.hidden = false;
+}
+
+function rememberExplanation(q, text) {
+  const cache = store.get('ex', {});
+  cache[exKey(q)] = text;
+  const keys = Object.keys(cache);
+  for (const k of keys.slice(0, Math.max(0, keys.length - MAX_EXPLANATIONS))) delete cache[k];
+  store.set('ex', cache);
+}
+
+function explainNote(text, cls = '') {
+  const p = document.createElement('p');
+  p.className = cls;
+  p.textContent = text;
+  return p;
+}
+
+function explainFallback(q, why) {
+  const links = document.createElement('p');
+  links.className = 'explain-links';
+  for (const { label, href } of explainLinks({ text: q.text, author: nameOf(q) })) {
+    const a = Object.assign(document.createElement('a'), { href, target: '_blank', rel: 'noopener', textContent: label });
+    links.append(a);
+  }
+  el.explain.replaceChildren(explainNote(why, 'muted small'), links);
+}
+
+async function toggleExplain() {
+  const q = current;
+  if (!q) return;
+  if (!el.explain.hidden) return resetExplain();
+  el.explainBtn.setAttribute('aria-expanded', 'true');
+  el.explain.hidden = false;
+  const seq = ++explainSeq;
+  const lang = settings.lang;
+
+  const cached = store.get('ex', {})[exKey(q)];
+  if (cached) return showExplanation(cached, lang);
+
+  el.explain.replaceChildren(explainNote('Thinking…', 'muted small pending'));
+  const state = await explainAvailability();
+  if (seq !== explainSeq) return;
+  if (state === 'unavailable') {
+    return explainFallback(q, 'Explanations are written privately on your device by Chrome’s built-in AI, which this device or browser does not offer yet.');
+  }
+  if (state === 'downloadable' && !store.get('ex.consent', false)) {
+    const go = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small', textContent: 'Download and explain' });
+    go.addEventListener('click', () => {
+      store.set('ex.consent', true);
+      resetExplain();
+      toggleExplain();
+    });
+    el.explain.replaceChildren(
+      explainNote('The first explanation downloads Chrome’s on-device AI model (a few GB, once, best on Wi-Fi). After that it works offline, and your quotes never leave the device.', 'muted small'),
+      go
+    );
+    return;
+  }
+
+  const status = explainNote(state === 'available' ? 'Thinking…' : 'Preparing the on-device model…', 'muted small pending');
+  el.explain.replaceChildren(status);
+  try {
+    const context = [findSource(q.sourceId)?.blurb, q.section].filter(Boolean).join(', ');
+    let text = await explain({ text: q.text, author: nameOf(q), context }, {
+      onProgress: (p) => { if (seq === explainSeq) status.textContent = `Downloading the on-device model… ${Math.round(p * 100)}%`; },
+    });
+    if (lang) {
+      status.textContent = `Translating into ${languageName(lang)}…`;
+      try { text = await translate(text, lang); } catch { /* keep the English */ }
+    }
+    if (!text) throw new Error('empty explanation');
+    rememberExplanation(q, text);
+    if (seq !== explainSeq) return;
+    showExplanation(text, lang);
+    if (!loadJourney().explained) reward(0, (j) => { j.explained = 1; });
+  } catch (err) {
+    logIssue('explain', err);
+    if (seq !== explainSeq) return;
+    explainFallback(q, 'The on-device AI could not explain this one right now.');
+  }
+}
+
+function showExplanation(text, lang) {
+  const nodes = text.split(/\n{2,}/).map((t) => explainNote(t));
+  for (const n of nodes) if (lang) n.setAttribute('lang', lang);
+  el.explain.replaceChildren(...nodes, explainNote('Written by the on-device AI — it can be wrong.', 'muted small'));
 }
 
 // ---------- library ----------
@@ -965,7 +1105,8 @@ function renderLanguages() {
       settings.lang = code;
       saveSettings();
       el.langCurrent.textContent = code ? languageName(code) : 'off';
-      if (current) renderTranslation(current);
+      renderShowMode();
+      if (current) renderQuote();
     });
     const a = document.createElement('span');
     a.className = 'art';
@@ -981,6 +1122,65 @@ function renderLanguages() {
     ...options.map((o) => card(o, flagSvg(o.code)))
   );
   el.langCurrent.textContent = settings.lang ? languageName(settings.lang) : 'off';
+  renderShowMode();
+}
+
+/** Radio buttons styled as a segmented control. */
+function segmented(container, name, options, value, onChange) {
+  container.replaceChildren(...options.map((o) => {
+    const label = document.createElement('label');
+    label.className = 'seg';
+    const input = Object.assign(document.createElement('input'), { type: 'radio', name, value: String(o.value), checked: o.value === value });
+    input.addEventListener('change', () => onChange(o.value));
+    const span = document.createElement('span');
+    span.textContent = o.label;
+    if (o.style) span.style.cssText = o.style;
+    label.append(input, span);
+    return label;
+  }));
+}
+
+function renderShowMode() {
+  el.showMode.hidden = !settings.lang;
+  if (!settings.lang) return;
+  const name = languageName(settings.lang);
+  segmented(el.showOptions, 'show', [
+    { value: 'lang', label: `Only ${name}` },
+    { value: 'both', label: `English + ${name}` },
+    { value: 'orig', label: `Original + ${name}` },
+  ], settings.show, (v) => {
+    settings.show = v;
+    saveSettings();
+    renderShowMode();
+    if (current) renderQuote();
+  });
+  el.showNote.textContent = settings.show === 'orig'
+    ? 'The original text (Latin, Greek, French, German…) is shown when Wikiquote has it; otherwise the English.'
+    : '';
+}
+
+// ---------- settings: text size ----------
+
+const TEXT_SIZES = [
+  { value: 0.85, label: 'A', name: 'small' },
+  { value: 1, label: 'A', name: 'normal' },
+  { value: 1.2, label: 'A', name: 'large' },
+  { value: 1.45, label: 'A', name: 'extra large' },
+];
+
+function applyTextSize() {
+  document.documentElement.style.setProperty('--ts', String(settings.textSize));
+}
+
+function renderSizes() {
+  segmented(el.sizes, 'size', TEXT_SIZES.map((s) => ({ ...s, style: `font-size:${s.value * 1.15}rem` })), settings.textSize, (v) => {
+    settings.textSize = v;
+    saveSettings();
+    applyTextSize();
+    renderSizes();
+  });
+  for (const [i, label] of [...el.sizes.children].entries()) label.title = label.ariaLabel = `Text size: ${TEXT_SIZES[i].name}`;
+  el.sizeCurrent.textContent = TEXT_SIZES.find((s) => s.value === settings.textSize)?.name || '';
 }
 
 // ---------- settings: daily reminder (Web Push) ----------
@@ -1054,7 +1254,7 @@ async function syncPush() {
   let sub = null;
   try { sub = await currentSubscription(); } catch { return; }
   if (!sub || Notification.permission !== 'granted') return;
-  const prefs = { hour: settings.pushHour, timeZone: timeZone(), lang: settings.lang, themes: settings.themes, sources: settings.enabled };
+  const prefs = { hour: settings.pushHour, timeZone: timeZone(), lang: settings.lang, show: showMode(), themes: settings.themes, sources: settings.enabled };
   const fingerprint = JSON.stringify([sub.endpoint, prefs]);
   const last = store.get('pushSync', null);
   // Re-confirm at least daily: the server drops subscriptions the push service
@@ -1131,6 +1331,7 @@ async function openSettings() {
   renderThemeGrid();
   renderFollowCount();
   renderLanguages();
+  renderSizes();
   renderReminder();
   renderPassages();
   el.communityNote.textContent = communityEnabled()
@@ -1151,6 +1352,7 @@ function bind() {
   el.settingsOpen.addEventListener('click', openSettings);
   el.streakBtn.addEventListener('click', () => { renderJourney(); el.journey.showModal(); });
   el.another.addEventListener('click', () => showToday({ replace: true }));
+  el.explainBtn.addEventListener('click', toggleExplain);
 
   el.fav.addEventListener('click', () => {
     if (!current) return;
@@ -1164,8 +1366,7 @@ function bind() {
 
   el.share.addEventListener('click', async () => {
     if (!current) return;
-    const tr = settings.lang ? cachedTranslation(current, settings.lang) : '';
-    const text = `“${current.text}”\n— ${nameOf(current)}` + (tr ? `\n\n${tr}` : '');
+    const text = shareText(current);
     try {
       if (navigator.share) await navigator.share({ text });
       else {
@@ -1321,6 +1522,7 @@ async function init() {
   }
   saveSettings();
 
+  applyTextSize();
   renderDate();
   renderStreak();
   bind();

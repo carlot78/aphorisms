@@ -44,6 +44,8 @@
         <a class="source" id="quote-source" target="_blank" rel="noopener"></a>
         <span class="cite" id="quote-cite"></span>
       </footer>
+      <button type="button" class="explain-btn" id="explain-btn" aria-expanded="false">What does it mean?</button>
+      <div class="explain" id="explain" hidden></div>
       <p class="community" id="community" hidden></p>
       <p class="discover" id="discover" hidden>
         <span id="discover-text"></span>
@@ -108,9 +110,19 @@
       </details>
 
       <details class="section">
-        <summary><span>Translation</span><span class="muted" id="lang-current"></span></summary>
-        <p class="muted small">Show each thought in a second language too. The original always stays.</p>
-        <div class="flag-grid" id="flag-grid" role="radiogroup" aria-label="Translation language"></div>
+        <summary><span>Your language</span><span class="muted" id="lang-current"></span></summary>
+        <p class="muted small">Read each thought in your own language too.</p>
+        <div class="flag-grid" id="flag-grid" role="radiogroup" aria-label="Your language"></div>
+        <div class="show-mode" id="show-mode" hidden>
+          <p class="muted small">Show</p>
+          <div class="seg-group" id="show-options" role="radiogroup" aria-label="What to show"></div>
+          <p class="muted small" id="show-note"></p>
+        </div>
+      </details>
+
+      <details class="section">
+        <summary><span>Text size</span><span class="muted" id="size-current"></span></summary>
+        <div class="seg-group sizes" id="sizes" role="radiogroup" aria-label="Text size"></div>
       </details>
 
       <details class="section" id="reminder-section">
