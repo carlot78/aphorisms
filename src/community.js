@@ -84,3 +84,21 @@ export async function deleteReports(deviceId) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/delete_reports`, { method: 'POST', headers: headers(), body: JSON.stringify({ p_device: deviceId }) });
   if (!res.ok && res.status !== 404) throw new Error(`delete_reports: HTTP ${res.status}`);
 }
+
+/**
+ * A shared explanation of a catalog quote in `lang` ('en' for English),
+ * written by Claude on our Supabase Edge Function and cached for everyone.
+ * Only the quote id, its source id and the language are sent — no device id.
+ */
+export async function fetchExplanation({ quoteId, sourceId, lang }) {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/explain`, {
+    method: 'POST',
+    headers: { apikey: SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quoteId, sourceId, lang: lang || 'en' }),
+    signal: AbortSignal.timeout ? AbortSignal.timeout(25000) : undefined,
+  });
+  if (!res.ok) throw new Error(`explain: HTTP ${res.status}`);
+  const json = await res.json();
+  if (!json.text) throw new Error('explain: empty');
+  return json.text;
+}

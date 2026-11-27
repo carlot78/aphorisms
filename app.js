@@ -7,7 +7,7 @@ import { parseShared, parseClippings, bookmarklet } from './src/collection.js';
 import { buildProfile, pickPersonal, globalScore } from './src/taste.js';
 import { THEMES, themeById, themesOf } from './src/themes.js';
 import { emptyJourney, visit, liveStreak, levelOf, stats, checkBadges, roman, BADGES, XP } from './src/journey.js';
-import { communityEnabled, sendVote, fetchScores, toVote, savePush, deletePush, submitReport, deleteReports } from './src/community.js';
+import { communityEnabled, sendVote, fetchScores, toVote, savePush, deletePush, submitReport, deleteReports, fetchExplanation } from './src/community.js';
 import { pushSupported, isIos, isStandalone, currentSubscription, subscribe, unsubscribe, showLocalNotification, readLatestPush, savePushRenewalInfo } from './src/push.js';
 import { VAPID_PUBLIC_KEY } from './src/push-config.js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './src/community-config.js';
@@ -544,7 +544,7 @@ function renderJourney() {
 
 // ---------- diagnostics & problem reports ----------
 
-const APP_BUILD = 'v19'; // keep in step with VERSION in sw.js
+const APP_BUILD = 'v20'; // keep in step with VERSION in sw.js
 const MAX_ISSUES = 20;
 
 /** Remember a recent error (shown in, and sent with, a problem report). */
@@ -877,10 +877,29 @@ async function toggleExplain() {
   if (cached) return showExplanation(cached, lang);
 
   el.explain.replaceChildren(explainNote('Thinking…', 'muted small pending'));
+
+  // 1. The shared explanation (Claude, cached for every reader) for archive quotes.
+  if (isCatalogQuote(q) && communityEnabled()) {
+    try {
+      const text = await fetchExplanation({ quoteId: q.id, sourceId: q.sourceId, lang });
+      rememberExplanation(q, text);
+      if (seq !== explainSeq) return;
+      showExplanation(text, lang);
+      if (!loadJourney().explained) reward(0, (j) => { j.explained = 1; });
+      return;
+    } catch (err) {
+      logIssue('explain.server', err);
+      if (seq !== explainSeq) return;
+    }
+  }
+
+  // 2. Chrome's on-device model, where the browser has one.
   const state = await explainAvailability();
   if (seq !== explainSeq) return;
   if (state === 'unavailable') {
-    return explainFallback(q, 'Explanations are written privately on your device by Chrome’s built-in AI, which this device or browser does not offer yet.');
+    return explainFallback(q, isCatalogQuote(q)
+      ? 'An explanation is not available right now — please try again later.'
+      : 'Explanations for your own passages and added pages need Chrome’s on-device AI, which this device or browser does not offer yet.');
   }
   if (state === 'downloadable' && !store.get('ex.consent', false)) {
     const go = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small', textContent: 'Download and explain' });
@@ -919,10 +938,13 @@ async function toggleExplain() {
   }
 }
 
+/** Quotes from the published archive (not own passages or added Wikiquote pages). */
+const isCatalogQuote = (q) => /^[0-9a-f]{8}$/.test(q.id) && !!q.sourceId && q.sourceId !== COLLECTION_ID && !q.sourceId.startsWith('custom:') && !!findSource(q.sourceId);
+
 function showExplanation(text, lang) {
   const nodes = text.split(/\n{2,}/).map((t) => explainNote(t));
   for (const n of nodes) if (lang) n.setAttribute('lang', lang);
-  el.explain.replaceChildren(...nodes, explainNote('Written by the on-device AI — it can be wrong.', 'muted small'));
+  el.explain.replaceChildren(...nodes, explainNote('Written by AI — it can be wrong.', 'muted small'));
 }
 
 // ---------- library ----------
